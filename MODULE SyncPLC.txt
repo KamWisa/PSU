@@ -1,0 +1,690 @@
+MODULE SyncPLC
+    
+    ! Predefined user data
+    !*********************    
+    RECORD rcdBagSize
+            num width;
+            num length;
+            num height;
+            num mass;    
+    ENDRECORD
+         
+    RECORD rcdPattern
+         num pattern_type;
+         num max_BagsPerLayer;
+         num max_Layer;
+    ENDRECORD
+     
+    RECORD rcdOffset
+         num x;
+         num y;
+         num z;     
+    ENDRECORD
+     
+    RECORD rcdPallet
+        num width;
+        num length;                
+    ENDRECORD    
+    
+    RECORD rcdGripper
+        num width;
+        num lenght;
+        rcdOffset Offset;
+    ENDRECORD    
+
+    RECORD rcdProduct
+            rcdBagSize Bag;        
+            rcdPattern pattern;
+            rcdOffset offset;   
+            rcdGripper gripper;
+    ENDRECORD
+        
+    CONST rcdProduct product_default := [[500,800,200,50],[2,5,6],[0,0,0],[600,700,[0,0,0]]];
+    
+    PERS rcdProduct product_L1 := [[420,830,122,30],[2,8,12],[30,-50,0],[425,680,[0,0,0]]];
+    PERS num nBagNo_L1 := 4;    
+    PERS num nLayerNo_L1 := 9;
+    
+    PERS rcdProduct product_L2 := [[420,830,122,30],[2,8,12],[50,40,0],[425,680,[0,0,0]]];
+    PERS num nBagNo_L2 := 1;    
+    PERS num nLayerNo_L2 := 1;    
+    
+    PERS rcdPallet Pallet_L1 := [1500,2100];
+    PERS rcdPallet Pallet_L2 := [1550,1300];
+
+    PERS bool bSpeedChange := TRUE;    
+    
+    PERS num nSpeedChange := 30;
+    
+    PERS num PalletHight_Offs := 0;
+  
+    VAR intnum irSetDataExt;
+    VAR intnum irGetDataExt;    
+    VAR intnum irResetPSortCnt_L1;
+    VAR intnum irResetPSortCnt_L2;
+    VAR intnum irPGServiceStop;
+    
+    VAR bool bFirststart := true;
+       
+    PROC main()      
+        IF bFirststart THEN
+           bFirststart := false; 
+           Init;          
+        ENDIF                
+    ENDPROC
+    
+    PROC Init()
+
+        IDelete irPGServiceStop;
+		CONNECT irPGServiceStop WITH tPLC_PGServiceStop;
+		ISignalDI DI11_PGServiceStop,1,irPGServiceStop;
+        
+		IDelete irSetDataExt;
+		CONNECT irSetDataExt WITH tPLC_SetDataExt;
+		ISignalDI DI11_SetData,1,irSetDataExt;
+
+        IDelete irGetDataExt;
+		CONNECT irGetDataExt WITH tPLC_GetDataExt;
+		ISignalDI DI11_GetData,1,irGetDataExt;
+        
+        
+        IDelete irResetPSortCnt_L1;
+		CONNECT irResetPSortCnt_L1 WITH tPLC_ResetPSortCnt_L1;
+		ISignalDI DI11_ResetPSortCnt_L1,1,irResetPSortCnt_L1;
+        
+        IDelete irResetPSortCnt_L2;
+		CONNECT irResetPSortCnt_L2 WITH tPLC_ResetPSortCnt_L2;
+		ISignalDI DI11_ResetPSortCnt_L2,1,irResetPSortCnt_L2;
+
+    ENDPROC   
+                           
+    PROC SetDataExt()
+        
+    VAR num nRespondValue;
+    VAR num nErrorNo;
+    var num nDType;
+    var num nDValue;           
+    VAR bool bFlagOK;
+                
+        !1	SpeedChange
+        
+        ! product 1
+        !2	Bag.width
+        !3	Bag.Length
+        !4	Bag.Heigth
+        !5	Bag.Load
+        !6	pattern.type
+        !7	pattern.max_BagPerLayer
+        !8	pattern.max_Layer
+        !9	Bag.position.offset.x
+        !10	Bag.position.offset.y
+        !11	Bag.position.offset.z
+        !12	LayerNo
+        !13	BagNo
+        !14	Pallet.Width
+        !15	Pallet.Length
+        !16	gripper.Width
+        ! product 2
+        !17	Bag.width
+        !18	Bag.Length
+        !19	Bag.Heigth
+        !20	Bag.mass
+        !21	pattern.type
+        !22	pattern.max_BagPerLayer
+        !23	pattern.max_Layer
+        !24	Bag.position.offset.x
+        !25	Bag.position.offset.y
+        !26	Bag.position.offset.z
+        !27	LayerNo
+        !28	BagNo
+        !29	Pallet.Width
+        !30	Pallet.Length
+        !31	gripper.Width
+        
+        nErrorNo := 0;
+        bFlagOK := FALSE;
+        nDType  := Trunc(AInput(GI11_DataType));        
+        nDValue := Trunc(AInput(GI11_DataValue));           
+        TEST nDType
+            CASE 1 :
+                ! Speed change 
+                ! SetSpeed_Refresh nDValue;
+                bSpeedChange := TRUE;
+                nSpeedChange := nDValue;
+                nRespondValue := nSpeedChange;
+                TPWrite "Set_Action : New Speed >> " + ValToStr(nRespondValue);                                
+                bFlagOK := TRUE;
+            !*****************************************                
+            ! product 1
+            !*****************************************                
+            CASE 2 : 
+                ! Bag.Width_L1                
+                product_L1.Bag.width := nDValue;                
+                nRespondValue := product_L1.Bag.width;
+                TPWrite "Set_Action L1: Bag.Width >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 3	: ! Bag.Length_L1                
+                product_L1.Bag.length := nDValue;                
+                nRespondValue := product_L1.Bag.length;
+                TPWrite "Set_Action L1: Bag.Length >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 4	: ! Bag.Height
+                product_L1.Bag.height := nDValue;
+                nRespondValue := product_L1.Bag.height;
+                TPWrite "Set_Action L1: Bag.Height >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 5	: ! Bag.mass
+                product_L1.Bag.mass := nDValue;
+                nRespondValue := product_L1.Bag.mass;
+                TPWrite "Set_Action L1: Bag.mass >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;                            
+            CASE 6	: ! Pattern Type
+                product_L1.pattern.pattern_type := nDValue;
+                nRespondValue := product_L1.pattern.pattern_type;
+                TPWrite "Set_Action L1: Pattern Type >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 7	: ! Max_BagPerLayer
+                product_L1.pattern.max_BagsPerLayer := nDValue;
+                nRespondValue := product_L1.pattern.max_BagsPerLayer;
+                TPWrite "Set_Action L1: Max_BagPerLayer >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 8	: ! Max_Layer
+                product_L1.pattern.max_Layer := nDValue;
+                nRespondValue := product_L1.pattern.max_Layer;
+                TPWrite "Set_Action L1: Max_Layer >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 9	: ! X_Offset_First_Bag
+                !IF DInput(DI11_DataNegative) = 1 THEN
+                !    product_L1.offset.x := -nDValue;
+                !ELSE 
+                !    product_L1.offset.x := nDValue;
+                !ENDIF 
+                product_L1.offset.x := nDValue;
+                nRespondValue := product_L1.offset.x;
+                TPWrite "Set_Action L1: X_Offset_First_Bag >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 10	: ! Y_Offset_First_Bag
+                !IF DInput(DI11_DataNegative) = 1 THEN
+                !    product_L1.offset.y := -nDValue;
+                !ELSE 
+                !    product_L1.offset.y := nDValue;
+                !ENDIF                 
+                product_L1.offset.y := nDValue;
+                nRespondValue := product_L1.offset.y;
+                TPWrite "Set_Action L1: Y_Offset_First_Bag >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 11	: ! Z_Offset_First_Bag
+                !IF DInput(DI11_DataNegative) = 1 THEN
+                !    product_L1.offset.z := -nDValue;
+                !ELSE 
+                !    product_L1.offset.z := nDValue;
+                !ENDIF                 
+                product_L1.offset.z := nDValue;
+                nRespondValue := product_L1.offset.z;
+                TPWrite "Set_Action L1: Z_Offset_First_Bag >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;                
+            CASE 12	: ! LayerNo            
+                IF ( nDValue <= 0 ) THEN
+                   nLayerNo_L1 := 1;    
+                ElseIF ( ( nDValue > nLayerNo_L1 ) OR ( nDValue = (nLayerNo_L1-1) AND (nBagNo_L1=1 ) ) AND 
+                         ( nDValue <= product_L1.pattern.max_Layer) ) THEN
+                   IF ( nDValue = (nLayerNo_L1-1) AND (nBagNo_L1=1 ) ) THEN
+                      nBagNo_L1 := product_L1.pattern.max_BagsPerLayer;
+                   ENDIF 
+                   nLayerNo_L1 := nDValue;                   
+                ENDIF                                 
+                nRespondValue := nLayerNo_L1;                
+                TPWrite "Set_Action L1: nLayerNo >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 13	: ! BagNo
+                IF nDValue = 0 then
+                   nBagNo_L1 := 1;
+                ELSEif (nDValue >= (nBagNo_L1-1) ) AND (nDValue <= product_L1.pattern.max_BagsPerLayer ) THEN
+                   nBagNo_L1 := nDValue;
+                ENDIF                                                 
+                nRespondValue := nBagNo_L1;                
+                TPWrite "Set_Action L1: nBagNo >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 14	: ! Pallet Width
+                Pallet_L1.width := nDValue;
+                nRespondValue := Pallet_L1.width;
+                TPWrite "Set_Action L1: Pallet_L1.width >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 15	: ! Pallet Lenght
+                Pallet_L1.length := nDValue;
+                nRespondValue := Pallet_L1.length;
+                TPWrite "Set_Action L1: Pallet_L1.length >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 16	: ! Gripper Width
+                product_L1.gripper.width := nDValue;
+                nRespondValue := product_L1.gripper.width;
+                TPWrite "Set_Action L1: product_L1.gripper.width >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            !*****************************************                
+            ! product 2
+            !*****************************************                
+            CASE 17 : 
+                ! Bag.Width_L2                
+                product_L2.Bag.width := nDValue;                
+                nRespondValue := product_L2.Bag.width;
+                TPWrite "Set_Action L2: Bag.Width >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 18	: ! Bag.Length_L2                
+                product_L2.Bag.length := nDValue;                
+                nRespondValue := product_L2.Bag.length;
+                TPWrite "Set_Action L2: Bag.Length >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 19	: ! Bag.Height
+                product_L2.Bag.height := nDValue;
+                nRespondValue := product_L2.Bag.height;
+                TPWrite "Set_Action L2: Bag.Height >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 20	: ! Bag.mass
+                product_L2.Bag.mass := nDValue;
+                nRespondValue := product_L2.Bag.mass;
+                TPWrite "Set_Action L2: Bag.mass >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;                            
+            CASE 21	: ! Pattern Type
+                product_L2.pattern.pattern_type := nDValue;
+                nRespondValue := product_L2.pattern.pattern_type;
+                TPWrite "Set_Action L2: Pattern Type >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 22	: ! Max_BagPerLayer
+                product_L2.pattern.max_BagsPerLayer := nDValue;
+                nRespondValue := product_L2.pattern.max_BagsPerLayer;
+                TPWrite "Set_Action L2: Max_BagPerLayer >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 23	: ! Max_Layer
+                product_L2.pattern.max_Layer := nDValue;
+                nRespondValue := product_L2.pattern.max_Layer;
+                TPWrite "Set_Action L2: Max_Layer >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 24	: ! X_Offset_First_Bag
+                !IF DInput(DI11_DataNegative) = 1 THEN
+                !    product_L2.offset.x := -nDValue;
+                !ELSE 
+                !    product_L2.offset.x := nDValue;
+                !ENDIF 
+                product_L2.offset.x := nDValue;
+                nRespondValue := product_L2.offset.x;
+                TPWrite "Set_Action L2: X_Offset_First_Bag >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 25	: ! Y_Offset_First_Bag
+                !IF DInput(DI11_DataNegative) = 1 THEN
+                !    product_L2.offset.y := -nDValue;
+                !ELSE 
+                !    product_L2.offset.y := nDValue;
+                !ENDIF                 
+                product_L2.offset.y := nDValue;
+                nRespondValue := product_L2.offset.y;
+                TPWrite "Set_Action L2: Y_Offset_First_Bag >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 26	: ! Z_Offset_First_Bag
+                !IF DInput(DI11_DataNegative) = 1 THEN
+                !    product_L2.offset.z := -nDValue;
+                !ELSE 
+                !    product_L2.offset.z := nDValue;
+                !ENDIF                 
+                product_L2.offset.z := nDValue;
+                nRespondValue := product_L2.offset.z;
+                TPWrite "Set_Action L2: Z_Offset_First_Bag >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;                
+            CASE 27	: ! LayerNo
+                IF ( nDValue <= 0 ) THEN
+                   nLayerNo_L2 := 1;
+                ElseIF ( ( nDValue > nLayerNo_L2 ) OR ( nDValue = (nLayerNo_L2-1) AND (nBagNo_L2=1 ) ) AND 
+                         ( nDValue <= product_L2.pattern.max_Layer) ) THEN
+                   IF ( nDValue = (nLayerNo_L2-1) AND (nBagNo_L2=1 ) ) THEN
+                      nBagNo_L2 := product_L2.pattern.max_BagsPerLayer;
+                   ENDIF 
+                   nLayerNo_L2 := nDValue;
+                ENDIF                                                 
+                nRespondValue := nLayerNo_L2;
+                TPWrite "Set_Action L2: nLayerNo >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 28	: ! BagNo
+                IF ( nDValue = 0 ) THEN
+                    nBagNo_L2 := 1;
+                ElseIF ( nDValue >= (nBagNo_L2-1) ) AND ( nDValue <= product_L2.pattern.max_BagsPerLayer) THEN
+                   nBagNo_L2 := nDValue;
+                ENDIF
+                nRespondValue := nBagNo_L2;
+                TPWrite "Set_Action L2: nBagNo >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 29	: ! Pallet Width
+                Pallet_L2.width := nDValue;
+                nRespondValue := Pallet_L2.width;
+                TPWrite "Set_Action L2: Pallet_L2.width >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 30	: ! Pallet Lenght
+                Pallet_L2.length := nDValue;
+                nRespondValue := Pallet_L2.length;
+                TPWrite "Set_Action L2: Pallet_L2.length >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 31	: ! Gripper Width
+                product_L2.gripper.width := nDValue;
+                nRespondValue := product_L2.gripper.width;
+                TPWrite "Set_Action L1: product_L2.gripper.width >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+                
+            DEFAULT :
+                TPWrite "Set_Action : Data type is illegal choice : ", \Num:=nDType;
+                nErrorNo := 1;
+        ENDTEST
+        
+        IF bFlagOK  THEN            
+           
+           ! Only 1in/2out, same product size
+           IF D11_1In2Out_SameProduct = 1 THEN
+               product_L2.Bag := product_L1.Bag;
+               product_L2.pattern := product_L1.pattern;
+               product_L2.gripper := product_L1.gripper;           
+           ENDIF 
+           
+           SetAO GO11_DataType, nDType;
+           SetAO GO11_DataValue, nRespondValue;
+           PulseDO \High \PLength:= 0.2, DO11_SetData_Respond;            
+           
+        ELSE
+           SetGO GO11_PGErrorNo, nErrorNo;
+           PulseDO \High \PLength:= 1.0, DO11_PGError;
+        ENDIF
+        
+    ENDPROC
+
+    PROC GetDataExt()
+        
+    VAR num nRespondValue;
+    VAR num nErrorNo;
+    var num nDType;
+    VAR bool bFlagOK;
+        
+        !1	SpeedChange
+        
+        ! product 1
+        !2	Bag.width
+        !3	Bag.Length
+        !4	Bag.Heigth
+        !5	Bag.Load
+        !6	pattern.type
+        !7	pattern.max_BagPerLayer
+        !8	pattern.max_Layer
+        !9	Bag.position.offset.x
+        !10	Bag.position.offset.y
+        !11	Bag.position.offset.z
+        !12	LayerNo
+        !13	BagNo
+        !14	Pallet.Width
+        !15	Pallet.Length
+        !16	Gripper.Width
+        ! product 2
+        !17	Bag.width
+        !18	Bag.Length
+        !19	Bag.Heigth
+        !20	Bag.Load
+        !21	pattern.type
+        !22	pattern.max_BagPerLayer
+        !23	pattern.max_Layer
+        !24	Bag.position.offset.x
+        !25	Bag.position.offset.y
+        !26	Bag.position.offset.z
+        !27	LayerNo
+        !28	BagNo
+        !29	Pallet.Width
+        !30	Pallet.Length
+        !31	Gripper.Width    
+        nErrorNo := 0;
+        bFlagOK := FALSE;
+        nDType  := Trunc(AInput(GI11_DataType));              
+        TEST nDType
+            CASE 1 :
+                ! get current robot speed 
+                nRespondValue := CSpeedOverride(\CTask);        
+                TPWrite "Get_Action : Speed >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 2 : 
+                ! Bag.width               
+                nRespondValue := product_L1.Bag.width;
+                TPWrite "Get_Action : product_L1.Bag.Width >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 3	: 
+                ! Bag.Length                
+                nRespondValue := product_L1.Bag.length;
+                TPWrite "Get_Action : product_L1.Bag.Length >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 4	:
+                ! Bag.Heigth
+                nRespondValue := product_L1.Bag.height;
+                TPWrite "Get_Action : product_L1.Bag.Height >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 5	: 
+                ! Bag.mass
+                nRespondValue := product_L1.Bag.mass;
+                TPWrite "Get_Action : product_L1.Bag.mass >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;                            
+            CASE 6	: 
+                ! Pattern Type
+                nRespondValue := product_L1.pattern.pattern_type;
+                TPWrite "Get_Action : product_L1.Pattern Type >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 7 : 
+                ! pattern.max_BagPerLayer
+                nRespondValue := product_L1.pattern.max_Layer;
+                TPWrite "Get_Action : product_L1.Max_BagPerLayer >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 8	: 
+                ! pattern.max_Layer
+                nRespondValue := product_L1.pattern.max_Layer;
+                SetGO GO11_MaxLayerNo_L1, product_L1.pattern.max_Layer;
+                TPWrite "Get_Action : product_L1.Max_Layer >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 9	: 
+                ! Bag.position.offset.x
+                nRespondValue := product_L1.offset.x;
+                TPWrite "Get_Action : product_L1.offset.x >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 10	: 
+                ! Bag.position.offset.y
+                nRespondValue := product_L1.offset.y;
+                TPWrite "Get_Action : product_L1.offset.y >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 11	: 
+                ! Bag.position.offset.z
+                nRespondValue := product_L1.offset.z;
+                TPWrite "Get_Action : product_L1.offset.z >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;                
+            CASE 12	: 
+                ! LayerNo
+                nRespondValue := nLayerNo_L1;
+                SetGO GO11_LayerNo_L1,nLayerNo_L1;
+                TPWrite "Get_Action : nLayerNo_L1 >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 13	: 
+                ! BagNo
+                nRespondValue := nBagNo_L1;
+                SetGO GO11_BagNo_L1,nBagNo_L1;
+                TPWrite "Get_Action : nBagNo_L1 >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 14	: 
+                ! Pallet.Width
+                nRespondValue := Pallet_L1.Width;
+                TPWrite "Get_Action : Pallet_L1.Width >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 15	: 
+                ! Pallet.Length
+                nRespondValue := Pallet_L1.length;
+                TPWrite "Get_Action : Pallet_L1.length >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 16	: 
+                ! Gripper.Width
+                nRespondValue := Product_L1.gripper.width;
+                TPWrite "Get_Action : Product_L1.gripper.width >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;                
+            CASE 17 : 
+                ! Bag.width               
+                nRespondValue := product_L2.Bag.width;
+                TPWrite "Get_Action : product_L2.Bag.Width >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 18	: 
+                ! Bag.Length                
+                nRespondValue := product_L2.Bag.length;
+                TPWrite "Get_Action : product_L2.Bag.Length >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 19	:
+                ! Bag.Heigth
+                nRespondValue := product_L2.Bag.height;
+                TPWrite "Get_Action : product_L2.Bag.Height >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 20	: 
+                ! Bag.mass
+                nRespondValue := product_L2.Bag.mass;
+                TPWrite "Get_Action : product_L2.Bag.mass >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;                            
+            CASE 21	: 
+                ! Pattern Type
+                nRespondValue := product_L2.pattern.pattern_type;
+                TPWrite "Get_Action : product_L2.Pattern Type >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 22 : 
+                ! pattern.max_BagPerLayer
+                nRespondValue := product_L2.pattern.max_Layer;
+                TPWrite "Get_Action : product_L2.Max_BagPerLayer >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 23	: 
+                ! pattern.max_Layer
+                nRespondValue := product_L2.pattern.max_Layer;
+                SetGO GO11_MaxLayerNo_L2, product_L2.pattern.max_Layer;
+                TPWrite "Get_Action : product_L2.Max_Layer >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 24	: 
+                ! Bag.position.offset.x
+                nRespondValue := product_L2.offset.x;
+                TPWrite "Get_Action : product_L2.offset.x >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 25	: 
+                ! Bag.position.offset.y
+                nRespondValue := product_L2.offset.y;
+                TPWrite "Get_Action : product_L2.offset.y >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 26	: 
+                ! Bag.position.offset.z
+                nRespondValue := product_L2.offset.z;
+                TPWrite "Get_Action : product_L2.offset.z >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;                
+            CASE 27	: 
+                ! LayerNo
+                nRespondValue := nLayerNo_L2;
+                SetGO GO11_LayerNo_L2, nLayerNo_L2;
+                TPWrite "Get_Action : nLayerNo_L2 >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 28	: 
+                ! BagNo
+                nRespondValue := nBagNo_L2;
+                SetGO GO11_BagNo_L2, nBagNo_L2;
+                TPWrite "Get_Action : nBagNo_L2 >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 29	: 
+                ! Pallet.Width
+                nRespondValue := Pallet_L2.Width;
+                TPWrite "Get_Action : Pallet_L2.Width >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 30	: 
+                ! Pallet.Length
+                nRespondValue := Pallet_L2.length;
+                TPWrite "Get_Action : Pallet_L2.length >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+            CASE 31	: 
+                ! Gripper.Width
+                nRespondValue := Product_L2.gripper.width;
+                TPWrite "Get_Action : Product_L2.gripper.width >> " + ValToStr(nRespondValue);
+                bFlagOK := TRUE;
+                
+            DEFAULT :
+                TPWrite "Get_Action : Data type is illegal choice : ", \Num:=nDType;
+                nErrorNo := 2;
+        ENDTEST
+        
+        IF bFlagOK  THEN           
+           SetAO GO11_DataType, nDType;
+           SetAO GO11_DataValue, nRespondValue;                      
+           PulseDO \High \PLength:= 0.2, DO11_GetData_Respond;
+        ELSE
+           SetGO GO11_PGErrorNo, nErrorNo;
+           PulseDO \High \PLength:= 1.0, DO11_PGError;
+        ENDIF
+        
+    ENDPROC        
+
+ 	PROC PLCUpdate()        
+        SetGO GO11_MaxLayerNo_L1, product_L1.pattern.max_Layer;
+        SetGO GO11_LayerNo_L1, nLayerNo_L1;
+        SetGO GO11_BagNo_L1, nBagNo_L1;        
+
+        SetGO GO11_MaxLayerNo_L2, product_L2.pattern.max_Layer;
+        SetGO GO11_LayerNo_L2, nLayerNo_L2;
+        SetGO GO11_BagNo_L2, nBagNo_L2;        
+    ENDPROC    
+    
+    PROC ResetPSortCnt(num nline, num nlNo, num nbNo )
+    VAR string text;    
+    VAR num nBagNo;
+    VAR num nLayerNo;
+    VAR bool bResetOK;
+    
+        bResetOK := FALSE;
+        nBagNo := nbNo;
+        nLayerNo := nlNo;                
+        text := "(Old) LayerNo = " + NumToStr(nLayerNo,0) + ", BagNo = "+ NumToStr(nBagNo,0);
+        
+        TEST nline
+        CASE 1 :
+            nBagNo_L1 := 1;
+            nLayerNo_L1 := 1;                            
+            nBagNo := nBagNo_L1;
+            nLayerNo := nLayerNo_L1;                
+            bResetOK := TRUE;            
+        CASE 2 : 
+            nBagNo_L2 := 1;
+            nLayerNo_L2 := 1;                        
+            nBagNo := nBagNo_L2;
+            nLayerNo := nLayerNo_L2;                
+            bResetOK := TRUE;            
+        DEFAULT:
+            TPWrite "Error lineno, Don't reset counter";            
+        ENDTEST               
+        
+        PLCUpdate;        
+        
+        IF bResetOK THEN 
+            PalletHight_Offs := 0;
+            PulseDO \High \PLength:= 1.0, DO11_ResetPSortCntOK;
+            TPWrite "Reset_Action : " + text;
+            TPWrite "Reset_Action : Reset sorting counter. ";     
+            text := "(new) LayerNo = " + NumToStr(nLayerNo,0) + ", BagNo = "+ NumToStr(nBagNo,0);
+            TPWrite "Reset_Action : " + text;             
+        ENDIF        
+        
+    ENDPROC
+        
+    TRAP tPLC_SetDataExt    
+        SetDataExt;        
+    ENDTRAP
+
+    TRAP tPLC_GetDataExt
+        GetDataExt;
+    ENDTRAP    
+    
+    TRAP tPLC_ResetPSortCnt_L1
+        ResetPSortCnt 1, nBagNo_L1, nLayerNo_L1;
+    ENDTRAP
+        
+    TRAP tPLC_ResetPSortCnt_L2
+        ResetPSortCnt 2, nBagNo_L2, nLayerNo_L2;
+    ENDTRAP
+
+    TRAP tPLC_PGServiceStop
+        TPWrite "stop background task";
+        Stop;        
+    ENDTRAP
+        
+ENDMODULE

@@ -1,0 +1,793 @@
+MODULE BagPalletizing
+            
+RECORD rcdBoxSize
+            num width;
+            num length;
+            num height;
+            num mass;    
+ENDRECORD     
+    ! Predefined user data
+    !*********************    
+    RECORD rcdBagSize
+            num width;
+            num length;
+            num height;
+            num mass;    
+    ENDRECORD    
+    
+    RECORD rcdPattern
+         num pattern_type;
+         num max_BagsPerLayer;
+         num max_Layer;
+    ENDRECORD
+     
+    RECORD rcdOffset
+         num x;
+         num y;
+         num z;     
+    ENDRECORD
+    
+    RECORD rcdPallet
+        num width;
+        num length;                
+    ENDRECORD    
+    
+    RECORD rcdGripper
+        num width;
+        num lenght;
+        rcdOffset Offset;
+    ENDRECORD    
+     
+    RECORD rcdProduct
+            rcdBagSize Bag;        
+            rcdPattern pattern;
+            rcdOffset offset;
+            rcdGripper gripper;
+    ENDRECORD
+    
+    RECORD robpath
+        robtarget readypos;        
+        robtarget afpickpos;
+        robtarget pickpos;
+        robtarget toppickpos;
+        robtarget safetypos;
+        robtarget topplacepos;        
+        robtarget placepos;
+    ENDRECORD
+                    
+    VAR clock ckSignleCycle;
+    
+    VAR errnum Err_UnknowBagNo := -1;
+    VAR errnum Err_UnknowLayerNo := -1;
+    VAR errnum Err_UnknowPatternType := -1;
+    VAR errnum Err_UnknowLineNo := -1;
+    VAR errnum Err_PalletSafety := -1;
+    
+    var bool bSafetyRotate := false;
+    VAR triggios  triosPicked{2} := [[TRUE, 100, TRUE, 0, "GO10_Gripper", 26, 0],[TRUE, 0, false, 0, "DO11_GPicked_L1", 1, 0]];        
+    VAR triggdata trPicking;
+    var triggdata trPicking2;
+    VAR triggdata trPlacing;            
+    
+    !CONST rcdProduct product_default := [[690,422,320,50],[2,5,6],[0,0,0],[0,0]];
+    
+    PERS rcdProduct product_L1 := [[420,830,122,30],[2,8,12],[30,-50,0],[425,680,[0,0,0]]];
+    PERS num nBagNo_L1 := 4;    
+    PERS num nLayerNo_L1 := 9;
+    
+    PERS rcdProduct product_L2 := [[420,830,122,30],[2,8,12],[50,40,0],[425,680,[0,0,0]]];
+    PERS num nBagNo_L2 := 1;    
+    PERS num nLayerNo_L2 := 1;    
+
+    PERS rcdPallet Pallet_L1 := [1700,1700];
+    PERS rcdPallet Pallet_L2 := [1700,1700];
+    
+    PERS num nPalletHight_Offs := 0;
+    
+    PERS bool bSpeedChange := FALSE;    
+    PERS num nSpeedChange := 75;
+    
+    CONST num accLow := 50;
+    CONST num accHi := 80;
+    
+    CONST speeddata vHome := [2800,250,5000,2000];     
+    CONST speeddata vmax := [7000,250,4500,2000]; 
+    
+	CONST jointtarget jCalibPos:=[[0,0,0,0,0,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+	TASK PERS tooldata tGripper:=[TRUE,[[0,0,700],[1,0,0,0]],[100,[0,0,350],[1,0,0,0],0,0,0]];
+	TASK PERS loaddata lBag:=[30,[0,0,10],[1,0,0,0],0,0,0];
+
+	CONST robtarget pTeachStart:=[[1661.86,0,508.9],[1.81E-06,-1.16054E-05,-1,4.11243E-11],[0,0,0,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+
+    !Line2 Y Positive
+    CONST robtarget pTeachPickLine2 :=[[1586.79,40.26,-239.50],[1.80927E-06,-0.00289069,-0.999996,5.11372E-08],[0,0,0,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget pTeachSafetyLine2 :=[[1686.79,200,99.99],[1.77028E-06,0.00154794,-0.999999,3.77075E-07],[0,0,0,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget pTeachPlaceLine2 :=[[-37.17,2488.85,-520.91],[4.71526E-09,-0.0123287,0.999924,-1.80999E-06],[1,0,0,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+
+    !Line1 Y Negatrive        
+    CONST robtarget pTeachPickLine1 :=[[1661.96,14.95,-690.20],[1.80998E-06,0.0128599,-0.999917,-6.99091E-09],[0,0,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget pTeachSafetyLine1 :=[[1686.12,-200,100.14],[1.38117E-06,0.00154465,-0.999999,-1.16981E-06],[-1,0,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST robtarget pTeachPlaceLine1 :=[[-38.46,-2487.50,-520.08],[5.03601E-08,-0.0123668,0.999924,1.80929E-06],[-2,0,-2,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];    
+    
+    ! define point go start
+    !CONST jointtarget jSafetyStart:=[[0.000676851,-2.90738,27.4566,0,0,0.00200673],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    CONST jointtarget jSafetyStart:=[[0,0,0,0,0,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    !CONST jointtarget jSafetyLine1:=[[-88.5936,-2.90738,27.4566,0,0,0.00200673],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    !CONST jointtarget jSafetyLine2:=[[-88.5936,-2.90738,27.4566,0,0,0.00200673],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    
+    ! pallet Width x Length
+    !CONST num nPalletWidth := 1700;
+    !CONST num nPalletLength := 1700;
+
+    ! Gripper Width x Length
+    !ONST num nGripperWidth := 600;
+    !CONST num nGripperLength := 700;    
+    
+    !CONST num nGRotate_OffsX_L2 := -75;
+    !CONST num nGRotate_OffsY_L2 :=  75;
+    
+    !CONST num nGRotate_OffsX_L1 := 0;
+    !CONST num nGRotate_OffsY_L1 := 0;    
+    
+    ! Station Distance Bag picking
+    
+    !CONST num nStationPickDistance := 750;
+    ! ax2 angle 30
+    !CONST jointtarget jpos10:=[[0,-30.0175,0,0,0,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    ! ax2 
+    !CONST robtarget p10:=[[1269.66,0.00,961.32],[1.81E-06,0,-1,0],[0,0,0,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    !CONST robtarget p20:=[[108.63,1506.45,59.09],[1.37326E-06,0.709889,-0.704313,1.17909E-06],[0,0,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    !CONST robtarget p30:=[[28.63,1426.45,-102.91],[1.31022E-06,0.709889,-0.704313,1.24876E-06],[0,0,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    !CONST robtarget p40:=[[8.63,1406.45,-122.91],[1.29269E-06,0.709889,-0.704313,1.2669E-06],[0,0,-1,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]];
+    
+    VAR num nTime_avg;
+    VAR num nTime_sum;
+    VAR num nTotalBagPerPallet:=48;
+    
+    VAR bool firstcycle := true;
+    var intnum intSpeedchange;            
+            
+    PERS rcdProduct product;
+    PERS robpath rpath;
+    PERS num nLineNo := 1;
+    PERS num nLayerNo := 9;
+    PERS num nBagNo := 3;
+    PERS num PalletHight_Offs := 0;
+    
+    PROC init()
+        
+        IDelete intSpeedchange;
+        CONNECT intSpeedchange WITH t_SpeedChange;
+        ISignalDI DI11_SpeedChange,1,intSpeedchange;                
+        
+        TriggIO trPicking, 50, \GOp:=GO10_Gripper,10;
+        TriggIO trPlacing, 110\GOp:=GO10_Gripper, 9;
+
+        BookErrNo Err_UnknowBagNo;
+        BookErrNo Err_UnknowLayerNo;
+        BookErrNo Err_UnknowPatternType;
+        BookErrNo Err_UnknowLineNo;
+        BookErrNo Err_PalletSafety;
+        
+    ENDPROC   
+    
+    PROC main()                        
+                                                  
+        IF firstcycle THEN 
+           init;        
+           Go_Start;
+           !TPWrite "First start program. "; 
+           firstcycle := false;
+        ENDIF                              
+        ProductDetecting nLineNo, product, rpath, nLayerNo, nBagNo;                
+        GoSortBags nLineNo, product, rpath;  
+        
+        ERROR 
+        IF ERRNO = Err_PalletSafety THEN 
+            ExitCycle;
+        ELSEIF ERRNO = Err_UnknowPatternType THEN
+            ExitCycle;
+        ELSEIF ERRNO = Err_UnknowLineNo THEN 
+            ExitCycle;
+        ELSEIF ERRNO = Err_UnknowBagNo THEN 
+            ExitCycle;
+        ENDIF 
+                
+    ENDPROC    
+    
+    PROC ProductDetecting( PERS num nLineNo, PERS rcdProduct prod, PERS robpath rp, PERS num nLayerNo, PERS num nBagNo )    
+        
+    PalletDetect:        
+        IsGripperReady;
+        CycleTime_Start;
+        ! Wait product detection
+        WaitDI DI11_ProductOK_L1,1;        
+        IF DInput(DI11_PalletOK_L1)=1 THEN 
+            prod := product_L1;
+            nLineNo := 1;
+            nBagNo := nBagNo_L1;
+            nLayerNo := nLayerNo_L1;
+            rp.pickpos := pTeachPickLine1;
+            rp.placepos := pTeachPlaceLine1;    
+            rp.safetypos := pTeachSafetyLine1;            
+            if  nLayerNo_L1 = 1 AND  nBagNo_L1 = 1 THEN
+                ! get pallet height offset
+                PalletHight_Offs := GetOffsetZ(nLineNo);
+                prod.offset.z := prod.offset.z + PalletHight_Offs;
+                IF DI11_PalletSafety_L1 = 1 THEN
+                    ERR_Send 25, "E0025: Error Pallet safety line1";
+                    RAISE Err_PalletSafety;
+                ENDIF 
+            ELSE 
+                prod.offset.z := PalletHight_Offs;
+            ENDIF                    
+        ELSEIF DInput(DI11_PalletOK_L2)=1 THEN
+            prod := product_L2;
+            nLineNo := 2;
+            nBagNo := nBagNo_L2;
+            nLayerNo := nLayerNo_L2;
+            rp.pickpos := pTeachPickLine1;
+            rp.placepos := pTeachPlaceLine2;    
+            rp.safetypos := pTeachSafetyLine2;            
+            if  nLayerNo_L2 = 1 AND  nBagNo_L2 = 1 THEN
+                ! get pallet height offset
+                PalletHight_Offs := GetOffsetZ(nLineNo);
+                prod.offset.z := prod.offset.z + PalletHight_Offs;
+                IF DI11_PalletSafety_L2 = 1 THEN
+                    ERR_Send 26, "E0026: Error Pallet safety line2";
+                    RAISE Err_PalletSafety;
+                ENDIF 
+            ELSE 
+                prod.offset.z := PalletHight_Offs;
+            ENDIF                
+        ELSE
+            goto PalletDetect;
+        ENDIF         
+        
+        GoSortBags_CreaterPath nLineNo, prod, rpath, nLayerNo, nBagNo;        
+        
+        ERROR
+        IF ERRNO = Err_PalletSafety RAISE Err_PalletSafety;
+        
+    ENDPROC
+            
+    PROC GoSortBags( num nLineNo, rcdProduct prod, robpath rp )
+    VAR string ProcName;
+                        
+        Set DO11_GPickUp_L1;
+        AccSet 95,100;
+        
+        lBag.mass := prod.Bag.mass;
+        GripLoad lBag;
+        
+        !***********************************************                        
+        ! Start PickUp & Place Down the bag to sort on the pallet
+        !***********************************************                                
+        TriggL rp.pickpos, vmax, trPicking, fine, tGripper\WObj:=wobj0;
+        TriggLIOs rp.afpickpos, vmax, \TriggData1:= triosPicked, z100,tGripper\WObj:=wobj0;
+        !***********************************************                        
+        ! Start PickUp & Place Down the bag to sort on the pallet
+        !***********************************************         
+        ProcName := "ResetPickedStatus_L"+NumToStr(nLineNo,0);
+        MoveJSync rp.safetypos, vmax, z200, tGripper\WObj:= wobj0,ProcName;                       
+        MoveJ rp.topplacepos, vmax, z100, tGripper\WObj:= wobj0;        
+        TriggL rp.placepos, vmax, trPlacing, z10, tGripper\WObj:=wobj0;
+        
+        IsGripperPlacedOK;
+        GripLoad load0;
+        AccSet 100,100;     
+        
+        ProcName := "UpdatePlaceStatus_L"+NumToStr(nLineNo,0);
+        MoveLSync rp.topplacepos, vmax, z100, tGripper\WObj:= wobj0,ProcName;                    
+        MoveJ rp.safetypos, vmax, z200, tGripper\WObj:= wobj0;                
+        ProcName := "CycleTime_Stop";
+        MoveJSync rp.toppickpos, vmax, z100, tGripper\WObj:= wobj0,ProcName;
+        IsGripperReady;
+        MoveL rp.readypos, vmax, z50, tGripper\WObj:= wobj0;                             
+        !waittime \InPos,0;
+                                                
+    ENDPROC
+        
+    
+    PROC GoSortBags_CreaterPath( PERS num nLineNo, PERS rcdProduct prod, PERS robpath rp, PERS num nLayerNo, PERS num nBagNo )
+    VAR num nOffsetX;
+    VAR num nOffsetY;
+    VAR num nOffsetZ;            
+        
+        !***********************************************                        
+        ! create Pick up the position
+        !***********************************************        
+        ! 1. pick position
+        ! rp.pickpos
+        ! 2. ready pick position
+        rp.readypos := Offs(rp.pickpos,0,0,50);
+        ! 3. after pick / top pick position
+        rp.afpickpos := Offs(rp.pickpos,0,0,300);           
+        rp.toppickpos := Offs(rp.pickpos,0,0,300);
+        
+        !***********************************************                        
+        ! create Place Up the Bag position
+        ! adjust teah place frist position by product
+        !***********************************************                                
+        !4. place position
+        !   offset first teach place position
+        nOffsetX := (prod.Bag.length - prod.gripper.lenght)/2 + prod.offset.x;
+        nOffsetY := prod.gripper.Offset.y + prod.offset.y;        
+        nOffsetZ := prod.offset.z;                                
+        rp.placepos := Offs(rp.placepos, nOffsetX, nOffsetY, nOffsetZ);            
+        
+        !5. offset place position.    
+        IF nLineNo = 1 THEN
+            TEST prod.pattern.pattern_type
+            CASE 1 :                    
+                rp.placepos := GetP6BPosYN_InSide( prod, rp.placepos, nLayerNo , nBagNo);        
+            CASE 2 : 
+                rp.placepos := GetP8BPosYN_InSide( prod, rp.placepos, nLayerNo , nBagNo);
+            DEFAULT:              
+              RAISE Err_UnknowPatternType;    
+            ENDTEST             
+        ELSEIF nLineNo = 2 THEN
+            TEST prod.pattern.pattern_type
+            CASE 1 :                    
+                rp.placepos := GetP6BPosYP_InSide( prod, rp.placepos, nLayerNo , nBagNo);        
+            CASE 2 : 
+                rp.placepos := GetP8BPosYP_InSide( prod, rp.placepos, nLayerNo , nBagNo);
+            DEFAULT:              
+              RAISE Err_UnknowPatternType;    
+            ENDTEST 
+        ELSE
+            RAISE Err_UnknowLineNo;
+        ENDIF
+                        
+        rp.topplacepos  := Offs(rp.placepos ,0,0,prod.Bag.height*1.2);        
+        !***********************************************
+        ! create safety position
+        !***********************************************
+        IF rp.topplacepos.trans.z >= rp.toppickpos.trans.z THEN
+           rp.safetypos.trans.z := rp.topplacepos.trans.z;
+           rp.toppickpos.trans.z := rp.topplacepos.trans.z;
+        ELSE 
+           rp.safetypos.trans.z := rp.toppickpos.trans.z;
+           rp.topplacepos.trans.z := rp.toppickpos.trans.z;
+        ENDIF 
+                                
+        ERROR 
+        IF errno = Err_UnknowPatternType THEN
+           ERR_Send 21, "E0021: Error Pattern type config."; 
+           raise Err_UnknowPatternType; 
+        ELSEIF ERRNO = Err_UnknowLineNo THEN
+           ERR_Send 22, "E0022: Error line no.";
+           raise Err_UnknowLineNo;
+        ENDIF 
+        
+    ENDPROC     
+        
+    PROC SetNextBag(rcdProduct prod,num lineno)        
+    VAR string sBagNo;
+    VAR string sLayerNo;
+    
+        TEST lineno
+        CASE 1:
+            sBagNo := NumToStr(nBagNo_L1,0);
+            sLayerNo := NumToStr(nLayerNo_L1,0);
+            TPWrite "Bag Sorted : LayerNo="+sLayerNo +", BagNo="+sBagNo;
+            
+            Incr nBagNo_L1;
+            IF nBagNo_L1 > prod.pattern.max_BagsPerLayer THEN
+               nBagNo_L1 := 1;
+               Incr nLayerNo_L1;
+               IF nLayerNo_L1 > prod.pattern.max_Layer THEN 
+                  nLayerNo_L1 := 1;                        
+                  ! Trigger finish bag sorting to PLC
+                  PulseDO \High \PLength:=1.0, DO11_PSortFinish_L1;                    
+               ENDIF            
+            ENDIF                             
+            UpdatePLC;                
+        DEFAULT:
+            sBagNo := NumToStr(nBagNo_L2,0);
+            sLayerNo := NumToStr(nLayerNo_L2,0);
+            TPWrite "Bag Sorted : LayerNo="+sLayerNo +", BagNo="+sBagNo;
+            
+            Incr nBagNo_L2;
+            IF nBagNo_L2 > prod.pattern.max_BagsPerLayer THEN
+               nBagNo_L2 := 1;
+               Incr nLayerNo_L2;
+               IF nLayerNo_L2 > prod.pattern.max_Layer THEN 
+                  nLayerNo_L2 := 1;                  
+                  ! Trigger finish bag sorting to PLC
+                  PulseDO \High \PLength:=1.0, DO11_PSortFinish_L2;                    
+               ENDIF            
+            ENDIF                             
+            UpdatePLC;                
+        ENDTEST            
+    ENDPROC
+    
+    FUNC num GetOffsetZ(num lineno)
+    VAR num offsz;
+        offsz := 0;
+        TEST lineno
+        CASE 1:        
+            TEST Trunc(GInput(GI11_PalletDetected_L1))
+            CASE 1: 
+                offsz := -450;
+            CASE 2,3:
+                offsz := -300;
+            CASE 4,5,6,7:
+                offsz := -150;
+            DEFAULT : ! case > 7
+                offsz := 0;
+            ENDTEST                                                 
+        DEFAULT:        
+            TEST Trunc(GInput(GI11_PalletDetected_L2))
+            CASE 1: 
+                offsz := -450;
+            CASE 2,3:
+                offsz := -300;
+            CASE 4,5,6,7:
+                offsz := -150;
+            DEFAULT : ! case > 7
+                offsz := 0;
+            ENDTEST                                         
+        ENDTEST                 
+        RETURN offsz;                                                
+    ENDFUNC 
+    
+    PROC ERR_Send( num nErr, String sErr)         
+         SetGO GO11_PGErrorNo, nErr;
+         Waittime 0.1;            
+         PulseDO \High \PLength:=1.0, DO11_PGError; 
+         TPWrite "Error : " + sErr;
+    ENDPROC
+        
+    PROC Go_Start()    
+    !CONST num nRobax1 := 0;
+    CONST num nRobax2 := 0;
+    CONST num nRobax3 := 0; 
+    CONST num nRobax6 := 0; 
+     
+    VAR robtarget pStart;            
+    VAR robtarget pReady10;    
+    VAR robtarget pReady20;    
+    VAR robtarget pReady30;    
+    VAR robtarget pReady40;    
+    VAR robtarget pReady50;    
+        
+    VAR robtarget pCurrent;
+    
+    VAR robtarget pSafety10;
+    
+    VAR jointtarget jCurrent;
+    VAR jointtarget jPos10;
+    VAR jointtarget jPos20;
+
+    VAR num Offs_Z;
+    
+    VAR num x_diff;
+    VAR num y_diff;
+    VAR num z_diff;
+    
+        
+        accset 10,100;                
+        ! prepare position
+        pStart := pTeachStart;
+        pReady10 := Offs(pStart, 0,0,1133 - pStart.trans.z);
+        
+        WaitTime \InPos ,0;                
+        ! get current position
+        pCurrent := CRobT(\Tool:=tGripper \WObj:=wobj0);
+        Offs_Z := pReady10.trans.z - pCurrent.trans.z;             
+        pReady20 := Offs (pCurrent, 0,0, Offs_Z);
+        IF pReady20.trans.x >= 1500 THEN  
+            MoveL pReady20, vHome, fine, tGripper\WObj:=wobj0;            
+        ELSE 
+            MoveL pReady20, vHome, fine, tGripper\WObj:=wobj0;                        
+        ENDIF                                
+        
+        ! get rob joint 
+        jCurrent := CJointT();        
+        jPos10 := jCurrent;
+        jPos10.robax.rax_2 := nRobax2;
+        jPos10.robax.rax_3 := nRobax3;
+        jPos10.robax.rax_6 := nRobax6;
+        
+        MoveAbsJ jPos10, vHome, z50, tGripper\WObj:=wobj0;
+        Reset DO11_GPickUp_L1;         
+        Reset DO11_GPickUp_L2;         
+        ResetGripper;
+        
+        MoveAbsJ jSafetyStart, vHome, z50, tGripper\WObj:=wobj0;        
+        GripLoad load0;                
+        
+        IsGripperReady;           
+        WaitTime \InPos,0;
+        
+        pCurrent := CRobT(\Tool:=tGripper \WObj:=wobj0);
+        
+        pReady30 := pCurrent;
+        pReady30.trans.x := pTeachPickLine1.trans.x;
+        pReady30.trans.y := pTeachPickLine1.trans.y;        
+        MoveJ pReady30, vHome, z200, tGripper\WObj:=wobj0; 
+        pReady40 := Offs(pTeachPickLine1,0,0,50);
+        MoveL pReady40, vHome, z50, tGripper\WObj:=wobj0;
+        
+    ENDPROC    
+    
+    
+	PROC Go_Zero()
+		MoveAbsJ jCalibPos\NoEOffs, v300, z50, tGripper;
+	ENDPROC    
+    
+!    PROC UpdatePickupStatus_L1()        
+!        PulseDO \High \PLength:=1.0, DO11_GPicked_L1;         
+!    ENDPROC
+
+!    PROC UpdatePickupStatus_L2()        
+!        PulseDO \High \PLength:=1.0, DO11_GPicked_L2;        
+!    ENDPROC
+    
+    PROC UpdatePlaceStatus_L1()      
+        SetNextBag product_L1, 1;
+        Reset DO11_GPickUp_L1;         
+        ResetGripper;        
+    ENDPROC
+
+    PROC UpdatePlaceStatus_L2()
+        SetNextBag product_L2, 2;
+        Reset DO11_GPickUp_L1;                
+        ResetGripper;        
+    ENDPROC
+    
+	PROC UpdatePLC()
+        SetGO GO11_MaxLayerNo_L1, product_L1.pattern.max_Layer;
+        SetGO GO11_LayerNo_L1, nLayerNo_L1;
+        SetGO GO11_BagNo_L1 , nBagNo_L1;                
+
+        SetGO GO11_MaxLayerNo_L2, product_L2.pattern.max_Layer;
+        SetGO GO11_LayerNo_L2, nLayerNo_L2;
+        SetGO GO11_BagNo_L2 , nBagNo_L2;                
+    ENDPROC             
+              
+    PROC SetSpeed_Refresh( num spValue)
+    VAR num nBF_Speed;
+    VAR num speed_corr;
+    VAR num nAF_Speed;    
+    
+        nBF_Speed := CSpeedOverride(\CTask);
+        speed_corr := spValue;
+	    IF speed_corr > 100 speed_corr := 100;
+		IF speed_corr < 0 speed_corr := 0;
+        SpeedRefresh speed_corr;                   
+        nAF_Speed := CSpeedOverride(\CTask);
+        TPWrite "New Speed >> " + ValToStr(nAF_Speed); 
+        ERROR
+          IF ERRNO = ERR_SPEED_REFRESH_LIM THEN
+            IF speed_corr > 100 speed_corr := 100;
+            IF speed_corr < 0 speed_corr := 0;
+            RETRY;
+          ENDIF        
+    ENDPROC          
+                  
+    PROC SetGripperPickUp()        
+        SetGO GO10_Gripper, 26;        
+    ENDPROC
+    
+    PROC ResetGripper()
+        SetGO GO10_Gripper, 5;                 
+    ENDPROC
+    
+    PROC ResetGripperPickUpStatus()
+        Reset DO11_GPickUp_L1;
+        Reset DO11_GPickUp_L2;
+    ENDPROC 
+    
+    PROC  ResetPickedStatus_L1()
+        Reset DO11_GPicked_L1;
+    ENDPROC
+
+    PROC  ResetPickedStatus_L2()
+        Reset DO11_GPicked_L1;
+    ENDPROC    
+    
+    PROC IsGripperReady()
+    VAR bool tflag;
+    begin:        
+        WaitDi DI10_GFork5, 1 \MaxTime:= 5.0 \TimeFlag := tflag;
+        IF tflag THEN             
+            tflag := FALSE;
+            ERR_Send 15, "E0015: Check Gripper Magnatic reed switch DO10_5 must to ON";
+            goto begin;
+        ENDIF        
+        WaitDi DI10_GFork6, 1 \MaxTime:= 5.0 \TimeFlag := tflag;
+        IF tflag THEN             
+            tflag := FALSE;
+            ERR_Send 16, "E0016: Check Gripper Magnatic reed switch DO10_6 must to ON";
+            goto begin;
+        ENDIF        
+        WaitDi DI10_GSidePress7, 1 \MaxTime:= 5.0 \TimeFlag := tflag;
+        IF tflag THEN             
+            tflag := FALSE;
+            ERR_Send 17, "E0017: Check Gripper Magnatic reed switch DO10_7 must to ON";
+            goto begin;
+        ENDIF        
+        WaitDi DI10_GSidePress8, 1 \MaxTime:= 5.0 \TimeFlag := tflag;
+        IF tflag THEN             
+            tflag := FALSE;
+            ERR_Send 18, "E0018: Check Gripper Magnatic reed switch DO10_8 must to ON";
+            goto begin;
+        ENDIF        
+    ENDPROC     
+    
+    PROC IsGripperPlacedOK()        
+    VAR bool tflag;
+    begin:        
+        WaitDi DI10_GFork5, 1 \MaxTime:= 5.0 \TimeFlag := tflag;
+        IF tflag THEN                         
+            tflag := FALSE;            
+            ERR_Send 15, "E0015: Check Gripper Magnatic reed switch DO10_5 must to ON";
+            goto begin;
+        ENDIF        
+        WaitDi DI10_GFork6, 1 \MaxTime:= 5.0 \TimeFlag := tflag;
+        IF tflag THEN             
+            tflag := FALSE;
+            ERR_Send 16, "E0016: Check Gripper Magnatic reed switch DO10_6 must to ON";
+            goto begin;
+        ENDIF                
+    ENDPROC        
+    
+    PROC TEST_RotateYP_FirstPlace()
+    VAR robtarget t10;    
+    VAR robtarget t20;    
+    VAR robtarget t30;    
+    VAR robtarget t40;    
+    VAR robtarget t50;    
+        
+        t10 := CRobT(\Tool:=tGripper \WObj:=wobj0);
+        t50 := Offs(t10,77.5,160,0);
+        MoveL t50, v100, fine, tGripper\WObj:=wobj0;
+        
+        
+        t20 := RelTool(t10,-70,90,0\Rz:=90);                
+        MoveL t20, v100, fine, tGripper\WObj:=wobj0;
+        t30 := Offs(t20,160,77.5,0);
+        MoveL t30, v100, fine, tGripper\WObj:=wobj0;
+        t40 := Offs(t30,0,580,0);
+        MoveL t40, v100, fine, tGripper\WObj:=wobj0;
+        MoveL t20, v100, fine, tGripper\WObj:=wobj0;
+        MoveL t10, v100, fine, tGripper\WObj:=wobj0;
+        
+        
+    ENDPROC
+
+    PROC TEST_RotateYN_FirstPlace()
+    VAR robtarget t10;    
+    VAR robtarget t20;    
+    VAR robtarget t30;    
+    VAR robtarget t40;    
+    VAR robtarget t50;    
+                              
+        t10 := CRobT(\Tool:=tGripper \WObj:=wobj0);
+        t50 := Offs(t10,77.5,-160,0);
+        MoveL t50, v100, fine, tGripper\WObj:=wobj0;
+        
+        
+        t20 := RelTool(t10,-70,-90,0\Rz:=-90);                
+        MoveL t20, v100, fine, tGripper\WObj:=wobj0;
+        t30 := Offs(t20,160,-77.5,0);
+        MoveL t30, v100, fine, tGripper\WObj:=wobj0;
+        t40 := Offs(t30,0,-580,0);
+        MoveL t40, v100, fine, tGripper\WObj:=wobj0;
+        MoveL t20, v100, fine, tGripper\WObj:=wobj0;
+        MoveL t10, v100, fine, tGripper\WObj:=wobj0;
+        
+        
+    ENDPROC
+    
+    
+    PROC Go_TeachPicked_Line1()
+    VAR robtarget p10;
+    VAR robtarget p20;
+        
+        Go_Start;
+        
+        p10 := Offs( pTeachPickLine1, 0,0, 500); 
+        p20 := pTeachPickLine1;
+        
+        MoveL p10, v100, z10, tGripper\WObj:=wobj0;
+        MoveL p20, v100, z10, tGripper\WObj:=wobj0;
+        MoveL p10, v100, z10, tGripper\WObj:=wobj0;
+                
+    ENDPROC
+
+    PROC Go_TeachPlace_Line1()
+    VAR robtarget p10;
+    VAR robtarget p20;
+        
+        Go_Start;
+               
+        p10 := pTeachPlaceLine1;
+        p10.trans.z := pTeachPickLine1.trans.z + 500;
+        p20 := pTeachPlaceLine1;
+        
+        MoveJ p10, v100, z10, tGripper\WObj:=wobj0;
+        MoveL p20, v100, z10, tGripper\WObj:=wobj0;        
+        MoveL p10, v100, z10, tGripper\WObj:=wobj0;        
+    ENDPROC
+    
+    PROC Go_TeachSafety_Line1()
+    VAR robtarget p10;
+    VAR robtarget p20;
+        
+        Go_Start;
+               
+        p10 := pTeachSafetyLine1;
+        p10.trans.z := pTeachSafetyLine1.trans.z + 500;
+        p20 := pTeachSafetyLine1;
+        
+        MoveJ p10, v100, z10, tGripper\WObj:=wobj0;
+        MoveL p20, v100, z10, tGripper\WObj:=wobj0;        
+        MoveL p10, v100, z10, tGripper\WObj:=wobj0;        
+    ENDPROC
+
+    PROC CycleTime_Start()
+        ClkReset ckSignleCycle;
+        ClkStart ckSignleCycle;         
+    ENDPROC
+        
+    PROC CycleTime_Stop()
+        var num nTime;
+        VAR string str1;                      
+        VAR string str2;                                      
+        VAR string str3;                                      
+            
+        ClkStop ckSignleCycle;
+        nTime:=ClkRead(ckSignleCycle);    
+        str1 := NumToStr(nTime,0);
+        !str2 := NumToStr(nBagNo,0);
+        !str3 := NumToStr(nLayerNo,0);
+        IF nLayerNo = 1 AND nBagNo = 1 THEN 
+            nTime_avg := nTime_sum/(nTotalBagPerPallet);
+            TPWrite "Sorting 1 Pallet time avg = " \Num:= nTime_avg;
+            nTime_sum := 0;
+            nTime_sum := nTime_sum + nTime;            
+        ELSE             
+            nTime_sum := nTime_sum + nTime;            
+            !TPWrite "Pick&Place 1 Cycle time = " + str1 + " of BagNo =" + str2 + " / LayerNo =" + str3;          
+            TPWrite "Cycle time = "+ str1;          
+        ENDIF
+                    
+    ENDPROC   
+    
+    FUNC robtarget CalRob_Rotate(robtarget p1, num degree)
+    VAR robtarget cal_p1;
+    VAR jointtarget cal_j1;     
+    VAR num nNewDegree;
+
+        cal_j1 := CalcJointT(p1, tGripper \WObj:=wobj0);
+        nNewDegree := cal_j1.robax.rax_6 + degree;
+        cal_j1.robax.rax_6 := nNewDegree;
+        cal_p1 := CalcRobT(cal_j1, tGripper\WObj:=wobj0);
+        RETURN cal_p1;
+
+    ENDFUNC    
+    
+     Trap t_SpeedChange
+     var num datavalue;
+     var num datatype;    
+     VAR num speed_corr;
+
+        datatype := AInput(GI11_DataType);
+        datavalue := AInput(GI11_DataValue);
+        if datatype = 1 THEN 
+            speed_corr := datavalue;
+    	    IF speed_corr > 100 speed_corr := 100;
+    		IF speed_corr < 0 speed_corr := 0;                
+            SpeedRefresh speed_corr;        
+            TPWrite " new change speed >> " + ValToStr(datavalue); 
+        Endif
+        
+     endtrap
+	PROC rAbb()
+		MoveAbsJ [[-90.0013,45,78,0,0,0],[9E+09,9E+09,9E+09,9E+09,9E+09,9E+09]]\NoEOffs, v1000, z50, tGripper;
+	ENDPROC    
+    
+ENDMODULE

@@ -1,0 +1,1370 @@
+MODULE BagPattern
+        
+Record rcdLW
+    num offset_pa_length;
+    num offset_pa_width;
+    num offset_pb_lw;
+ENDRECORD
+    
+!***************************************************************************************************************************    
+! pattern 6A YP_Layer1
+!                           || Conveyor infeed direction
+!                           \/
+!                           ___
+!                          |   |
+!                          |###|
+!							  
+!                           /\ 
+!         X-             [gripper]
+!    ___  ___  ___          ||
+!   | 2 || 6 || 4 |  [YP]  "ROB"  [YN]
+!   |###||###||###|         
+!    ###  ###  ###          
+!   | 1 || 5 || 3 |         
+!Y+ |___||___||___| Y-                                      
+!   [1]TeachPos 
+!         X+
+!         || conveyor outfeed direction
+!         \/
+!
+! pattern 6 YP_Layer2
+!    ______  ______
+!   |___3__##__4___|  [YP]  "ROB" [YN]
+!    ______  ______
+!   |___5__##__6___|
+!    ______  ______
+!   |___1__##__2___|
+!***************************************************************************************************************************          
+FUNC robtarget GetP6APosYP_Inside(rcdProduct prod, robtarget pTeach, num nLNo, num nBNo)
+
+VAR num nBagWidth;
+VAR num nBagHeight;
+VAR num nBagLength;    
+        
+VAR num nx;
+VAR num ny;
+VAR num nz;
+        
+VAR robtarget p10;
+VAR robtarget p20; ! when offset pos and next rotate 90 degree    
+VAR robtarget p30;
+        
+VAR num nSymOffset_W;
+VAR num nSymOffset_L;
+        
+VAR num nSymBagL;
+VAR num nSymBagW;
+VAR num nSymBagLW_Diff;
+    
+    
+    nBagWidth := prod.Bag.width;
+    nBagHeight := prod.Bag.height;
+    nBagLength := prod.Bag.length;    
+    
+    !*********************************
+    ! Pattern product sort 3Wx2L
+    ! Offset for symmetry WxL
+    !*********************************
+    ! calculate offset value for symmetry WxL
+    nSymBagW := nBagWidth*3;
+    nSymBagL := nBagLength*2;
+    nSymBagLW_Diff := nSymBagL - nSymBagW;
+    IF nSymBagLW_Diff >= 0 THEN
+        nSymOffset_W := nSymBagLW_Diff/2;
+        nSymOffset_L := 0;
+    ELSE 
+        nSymOffset_W := 0; 
+        nSymOffset_L := Abs(nSymBagLW_Diff); 
+    ENDIF             
+            
+    IF nLNo MOD 2 = 1 THEN 
+		TEST nBNo
+			CASE 1 :
+                nx := 0;
+                ny := 0;
+                nz := (nLNo-1)*nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, -180);
+            CASE 2 :
+                nx := nBagLength + nSymOffset_L;
+                ny := 0;
+                nz := (nLNo-1)*nBagHeight;
+                p10 := Offs(pTeach,nx,ny,nz);  
+            CASE 3 :
+                nx := 0;
+                ny := -2*nBagWidth - 2*nSymOffset_W;
+                nz := (nLNo-1)*nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, -180);
+            CASE 4 :
+                nx := nBagLength + nSymOffset_L;
+                ny := -2*nBagWidth - 2*nSymOffset_W;
+                nz := (nLNo-1)*nBagHeight;
+                p10 := Offs(pTeach,nx,ny,nz);  
+            CASE 5 :
+                nx := 0;
+                ny := -1*nBagWidth - nSymOffset_W;
+                nz := (nLNo-1)*nBagHeight + nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, -180);                
+            CASE 6 :
+                nx := nBagLength + nSymOffset_L;
+                ny := -1*nBagWidth - nSymOffset_W;
+                nz := (nLNo-1)*nBagHeight + nBagHeight;
+                p10 := Offs(pTeach,nx,ny,nz);  
+            DEFAULT :   raise Err_UnknowBagNo;                        
+        ENDTEST            
+    ELSE 
+		TEST nBNo
+            CASE 1 :
+                nx := -0.5*nBagLength + 0.5*nBagWidth;
+                ny := 0.5*nBagWidth - 0.5*nBagLength ;
+                nz := (nLNo-1)*nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, -90);                
+                bSafetyRotate := true;
+            CASE 2 :
+                nx := -0.5*nBagLength + 0.5*nBagWidth;
+                ny := 0.5*nBagWidth - 1.5*nBagLength - nSymOffset_L;
+                nz := (nLNo-1)*nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, 90);                
+                bSafetyRotate := true;
+            CASE 3 :
+                nx := -0.5*nBagLength + 2.5*nBagWidth + 2*nSymOffset_W;
+                ny := 0.5*nBagWidth - 0.5*nBagLength;
+                nz := (nLNo-1)*nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, -90);                
+                bSafetyRotate := true;
+            CASE 4 :
+                nx := -0.5*nBagLength + 2.5*nBagWidth + 2*nSymOffset_W;
+                ny := 0.5*nBagWidth - 1.5*nBagLength - nSymOffset_L;
+                nz := (nLNo-1)*nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, 90);                
+                bSafetyRotate := true;
+            CASE 5 :
+                nx := -0.5*nBagLength + 1.5*nBagWidth + nSymOffset_W;
+                ny := 0.5*nBagWidth - 0.5*nBagLength;
+                nz := (nLNo-1)*nBagHeight + nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, -90);                
+                bSafetyRotate := true;
+            CASE 6 :
+                nx := -0.5*nBagLength + 1.5*nBagWidth + nSymOffset_W;
+                ny := 0.5*nBagWidth - 1.5*nBagLength - nSymOffset_L;
+                nz := (nLNo-1)*nBagHeight + nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, 90);                
+                bSafetyRotate := true;
+            DEFAULT :  raise Err_UnknowBagNo;                     
+        ENDTEST            
+    ENDIF                
+    RETURN p10;        
+    ERROR 
+		IF ERRNO = Err_UnknowBagNo THEN            
+			ERR_Send 20, "E0020:  Error Max BagNo/Layer Config" ;
+            RAISE Err_UnknowBagNo;
+        ENDIF         
+ENDFUNC
+
+!***************************************************************************************************************************    
+! pattern 6A YN_Layer1
+!                           || Conveyor infeed direction
+!                           \/
+!                           ___
+!                          |   |  bag direction
+!                          |###|
+!							  
+!                           /\ 
+!      					[gripper] 
+!	  						||		    ___  ___  ___
+!					 [YP]  "ROB"  [YN] | 4 || 6 || 2 |  
+!					                   |###||###||###|
+!					                    ###  ###  ###
+!					                   | 3 || 5 || 1 |
+!					                   |___||___||___| [1]TeachPos
+!                           ||
+!					        \/ Conveyor outfeed direction		
+!  						     
+!
+!					 pattern 6 YN_Layer2
+!					                    ______  ______
+!					 [YP]  "ROB" [YN]  |___4__##__3___|  
+!					                    ______  ______
+!					                   |___6__##__5___|
+!					                    ______  ______
+!					                   |___2__##__1___|
+!***************************************************************************************************************************          
+ 
+FUNC robtarget GetP6APosYN_Inside(rcdProduct prod, robtarget pTeach, num nLNo, num nBNo)
+
+VAR num nBagWidth;
+VAR num nBagHeight;
+VAR num nBagLength;      
+
+VAR num nx;
+VAR num ny;
+VAR num nz;
+
+VAR robtarget p10;
+VAR robtarget p20; ! when offset pos and next rotate 90 degree    
+             
+VAR num nSymOffset_W;
+VAR num nSymOffset_L;
+    
+VAR num nSymBagL;
+VAR num nSymBagW;
+var num nSymBagLW;
+VAR num nSymBagLW_Diff;
+
+    nBagWidth := prod.Bag.width;
+    nBagHeight := prod.Bag.height;
+    nBagLength := prod.Bag.length;  
+    
+     !*********************************
+    ! Pattern product sort 3Wx2L
+    ! Offset for symmetry WxL
+    !*********************************
+    ! calculate offset value for symmetry WxL
+    nSymBagW := nBagWidth*3;
+    nSymBagL := nBagLength*2;
+    nSymBagLW_Diff := nSymBagL - nSymBagW;
+    IF nSymBagLW_Diff >= 0 THEN
+        nSymOffset_W := nSymBagLW_Diff/2;
+        nSymOffset_L := 0;
+    ELSE 
+        nSymOffset_W := 0; 
+        nSymOffset_L := Abs(nSymBagLW_Diff);
+    ENDIF      
+    
+    IF nLNo MOD 2 = 1 THEN 
+       TEST nBNo
+         CASE 1 :
+            nx := 0;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20,180);                 
+         CASE 2 :
+            nx := nBagLength + nSymOffset_L;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);   
+         CASE 3 :
+            nx := 0;
+            ny := 2*nBagWidth + 2*nSymOffset_W;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);   
+            p10 := CalRob_Rotate(p20,180);                 
+            
+         CASE 4 :
+            nx := nBagLength + nSymOffset_L;
+            ny := 2*nBagWidth + 2*nSymOffset_W;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);   
+         CASE 5 :
+            nx := 0;
+            ny := nBagWidth + nSymOffset_W;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                   
+            p10 := CalRob_Rotate(p20,180);                 
+         CASE 6 :
+            nx := nBagLength + nSymOffset_L;
+            ny := nBagWidth + nSymOffset_W;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);   
+         DEFAULT :   raise Err_UnknowBagNo;           
+       ENDTEST            
+    ELSE 
+       TEST nBNo
+         CASE 1 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny := -0.5*nBagWidth + 0.5*nBagLength;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                
+            p10 := CalRob_Rotate(p20,90);                                 
+            bSafetyRotate := TRUE;                
+         CASE 2 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny := -0.5*nBagWidth + 1.5*nBagLength + nSymOffset_L;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20,-90);                                 
+            bSafetyRotate := TRUE;                
+         CASE 3 :
+            nx := -0.5*nBagLength + 2.5*nBagWidth + 2*nSymOffset_W;
+            ny := -0.5*nBagWidth + 0.5*nBagLength;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20,90);                 
+            bSafetyRotate := TRUE;                
+         CASE 4 :
+            nx := -0.5*nBagLength + 2.5*nBagWidth + 2*nSymOffset_W;
+            ny := -0.5*nBagWidth + 1.5*nBagLength + nSymOffset_L;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                
+            p10 := CalRob_Rotate(p20,-90);                 
+            bSafetyRotate := TRUE;                
+         CASE 5 :
+            nx := -0.5*nBagLength + 1.5*nBagWidth + nSymOffset_W;
+            ny := 0.5*nBagLength - 0.5*nBagWidth;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20,90);                 
+            bSafetyRotate := TRUE;                
+         CASE 6 :
+            nx := -0.5*nBagLength + 1.5*nBagWidth + nSymOffset_W;
+            ny := -0.5*nBagWidth + 1.5*nBagLength + nSymOffset_L;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20,-90);                                 
+            bSafetyRotate := TRUE;                
+         DEFAULT :  raise Err_UnknowBagNo;                     
+       ENDTEST            
+    ENDIF        
+    
+    RETURN p10;
+    
+    ERROR 
+    IF ERRNO = Err_UnknowBagNo THEN   
+        ERR_Send 20, "E0020:  Error Max BagNo/Layer Config" ;            
+        RAISE Err_UnknowBagNo;
+    ENDIF   
+    
+ENDFUNC  
+
+!***************************************************************************************************************************    
+! Pattern 6B YP_Layer1
+!
+!						   ||  
+!       				   \/ conveyor infeed direction
+!                                            X-
+!	  								    ___  ___  ___
+!				    [YN]  "ROB"  [YP]  | 3 || 5 || 1 | Rotate 2:-180, 4:-180, 6:-180
+!					       ||          |###||###||###|
+!					       \/           ###  ###  ###
+!					    [gripper]      | 4 || 6 || 2 |
+!					  	   ___      -y |___||___||___| Y+
+!                         |   |   
+!                         |###|               X+
+!                           
+!					 						 || 			
+!  						                     \/ Conveyor outfeed direction
+!   								   
+!
+!					 pattern 6 YN_Layer2
+!					                    ______  ______
+!					 [YN]  "ROB" [YP]  |___2__##_1___|  Rotate :
+!					                    ______  ______ 			
+!					                   |___6__##__5___|
+!					                    ______  ______
+!					                   |___4__##__3___|
+!
+!***************************************************************************************************************************          
+FUNC robtarget GetP6BPosYP_Inside(rcdProduct prod, robtarget pTeach, num nLNo, num nBNo)
+
+VAR num nBagWidth;
+VAR num nBagHeight;
+VAR num nBagLength;    
+        
+VAR num nx;
+VAR num ny;
+VAR num nz;
+        
+VAR robtarget p10;
+VAR robtarget p20; ! for rotate bag
+
+        
+VAR num nSymOffset_W;
+VAR num nSymOffset_L;
+        
+VAR num nSymBagL;
+VAR num nSymBagW;
+VAR num nSymBagLW_Diff;
+    
+    
+    nBagWidth := prod.Bag.width;
+    nBagHeight := prod.Bag.height;
+    nBagLength := prod.Bag.length;    
+        
+    ! calculate offset value for symmetry WxL
+    nSymBagW := nBagWidth*3;
+    nSymBagL := nBagLength*2;
+    nSymBagLW_Diff := nSymBagL - nSymBagW;
+    IF nSymBagLW_Diff >= 0 THEN
+        nSymOffset_W := nSymBagLW_Diff/2;
+        nSymOffset_L := 0;
+    ELSE 
+        nSymOffset_W := 0; 
+        nSymOffset_L := Abs(nSymBagLW_Diff);
+    ENDIF             
+        
+    IF nLNo MOD 2 = 0 THEN 
+		TEST nBNo
+			CASE 1 :
+                nx := 0;
+                ny := 0;
+                nz := (nLNo-1)*nBagHeight;
+                p10 := Offs(pTeach,nx,ny,nz);
+            CASE 2 :
+                nx := nBagLength + nSymOffset_L;
+                ny := 0;
+                nz := (nLNo-1)*nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);  
+                p10 := CalRob_Rotate(p20, -180);                
+            CASE 3 :
+                nx := 0;
+                ny := -2*nBagWidth - 2*nSymOffset_W;
+                nz := (nLNo-1)*nBagHeight;
+                p10 := Offs(pTeach,nx,ny,nz);
+            CASE 4 :
+                nx := nBagLength + nSymOffset_L;
+                ny := -2*nBagWidth - 2*nSymOffset_W;
+                nz := (nLNo-1)*nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);  
+                p10 := CalRob_Rotate(p20, -180);
+            CASE 5 :
+                nx := 0;
+                ny := -1*nBagWidth - nSymOffset_W;
+                nz := (nLNo-1)*nBagHeight + nBagHeight;
+                p10 := Offs(pTeach,nx,ny,nz);
+            CASE 6 :
+                nx := nBagLength + nSymOffset_L;
+                ny := -1*nBagWidth - nSymOffset_W;
+                nz := (nLNo-1)*nBagHeight + nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);  
+                p10 := CalRob_Rotate(p20, -180);
+            DEFAULT :   raise Err_UnknowBagNo;                        
+        ENDTEST            
+    ELSE 
+		TEST nBNo
+            CASE 1 :
+                nx := -0.5*nBagLength + 0.5*nBagWidth;
+                ny := -0.5*nBagLength + 0.5*nBagWidth;
+                nz := (nLNo-1)*nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, 90);                
+                bSafetyRotate := true;
+            CASE 2 :
+                nx := -0.5*nBagLength + 0.5*nBagWidth;
+                ny := -1.5*nBagLength - nSymOffset_L + 0.5*nBagWidth;
+                nz := (nLNo-1)*nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, -90);                
+                bSafetyRotate := true;
+            CASE 3 :
+                nx := -0.5*nBagLength + 2.5*nBagWidth + 2*nSymOffset_W;
+                ny := -0.5*nBagLength + 0.5*nBagWidth;
+                nz := (nLNo-1)*nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, 90);                
+                bSafetyRotate := true;
+            CASE 4 :
+                nx := -0.5*nBagLength + 2.5*nBagWidth + 2*nSymOffset_W;
+                ny := -1.5*nBagLength - nSymOffset_L + 0.5*nBagWidth;
+                nz := (nLNo-1)*nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, -90);                
+                bSafetyRotate := true;
+            CASE 5 :
+                nx := -0.5*nBagLength + 1.5*nBagWidth + nSymOffset_W;
+                ny := -0.5*nBagLength + 0.5*nBagWidth;
+                nz := (nLNo-1)*nBagHeight + nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, 90);                
+                bSafetyRotate := true;
+            CASE 6 :
+                nx := -0.5*nBagLength + 1.5*nBagWidth + 1*nSymOffset_W;
+                ny := -1.5*nBagLength - nSymOffset_L + 0.5*nBagWidth;
+                nz := (nLNo-1)*nBagHeight + nBagHeight;
+                p20 := Offs(pTeach,nx,ny,nz);
+                p10 := CalRob_Rotate(p20, -90);                
+                bSafetyRotate := true;
+            DEFAULT :  raise Err_UnknowBagNo;                     
+        ENDTEST            
+    ENDIF                
+    RETURN p10;        
+    ERROR 
+		IF ERRNO = Err_UnknowBagNo THEN            
+			ERR_Send 20, "E0020:  Error Max BagNo/Layer Config" ;
+            raise Err_UnknowBagNo;
+        ENDIF         
+ENDFUNC
+
+!***************************************************************************************************************************    
+! Pattern 6B YN_Layer1
+!							  
+!          X-               || 
+!    ___  ___  ___          \/ Conveyor infeed direction
+!   | 1 || 5 || 3 |  		
+!Y- |###||###||###| Y+         
+!    ###  ###  ###   [YN]  "ROB"  [YP]       
+!   | 2 || 6 || 4 |         ||
+!   |___||___||___|     [gripper] 
+!         X+                \/
+!                           ___ 
+!                          |   |
+!                          |###|  
+!
+!         ||
+!		  \/ Conveyor outfeed direction 			      						
+!
+! pattern 6B YN_Layer2
+!    ______  ______
+!   |___1__##__2___|  [YN]  "ROB" [YP]
+!    ______  ______
+!   |___5__##__6___|
+!    ______  ______
+!   |___3__##__4___|
+!***************************************************************************************************************************           
+FUNC robtarget GetP6BPosYN_Inside(rcdProduct prod, robtarget pTeach, num nLNo, num nBNo)
+
+VAR num nBagWidth;
+VAR num nBagHeight;
+VAR num nBagLength;      
+
+VAR num nx;
+VAR num ny;
+VAR num nz;
+
+VAR robtarget p10;
+VAR robtarget p20; ! when offset pos and next rotate 90 degree    
+             
+VAR num nSymOffset_W;
+VAR num nSymOffset_L;
+VAR num nSymOffset_LW;
+    
+VAR num nSymBagL;
+VAR num nSymBagW;
+var num nSymBagLW;
+VAR num nSymBagLW_Diff;
+var num nSymBagLW_Diff1;
+
+    nBagWidth := prod.Bag.width;
+    nBagHeight := prod.Bag.height;
+    nBagLength := prod.Bag.length;  
+    
+    ! calculate offset value for symmetry WxL
+    nSymBagW := nBagWidth*3;
+    nSymBagL := nBagLength*2;
+    nSymBagLW_Diff := nSymBagL - nSymBagW;
+    IF nSymBagLW_Diff >= 0 THEN
+        nSymOffset_W := nSymBagLW_Diff/2;
+        nSymOffset_L := 0;
+    ELSE 
+        nSymOffset_W := 0;
+        nSymOffset_L := Abs(nSymBagLW_Diff); 
+    ENDIF             
+    
+    IF nLNo MOD 2 = 0 THEN 
+       TEST nBNo
+         CASE 1 :
+            nx := 0;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+                             
+         CASE 2 :
+            nx := nBagLength + nSymOffset_L;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20,180);
+         CASE 3 :
+            nx := 0;
+            ny := 2*nBagWidth + 2*nSymOffset_W;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);              
+         CASE 4 :
+            nx := nBagLength + nSymOffset_L;
+            ny := 2*(nBagWidth + nSymOffset_W);
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz); 
+            p10 := CalRob_Rotate(p20,180);
+         CASE 5 :
+            nx := 0;
+            ny := nBagWidth + nSymOffset_W;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);                                                
+         CASE 6 :
+            nx := nBagLength + nSymOffset_L;
+            ny := nBagWidth + nSymOffset_W;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20,180);
+         DEFAULT :   raise Err_UnknowBagNo;           
+       ENDTEST            
+    ELSE 
+       TEST nBNo
+         CASE 1 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny := 0.5*nBagLength - 0.5*nBagWidth;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                
+            p10 := CalRob_Rotate(p20,-90);                                 
+            bSafetyRotate := TRUE;                
+         CASE 2 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny := (1.5*nBagLength + nSymOffset_L) - 0.5*nBagWidth;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20,90);                                 
+            bSafetyRotate := TRUE;                
+         CASE 3 :
+            nx := -0.5*nBagLength + (2.5*nBagWidth + 2*nSymOffset_W);
+            ny := 0.5*nBagLength - 0.5*nBagWidth;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20,-90);                 
+            bSafetyRotate := TRUE;                
+         CASE 4 :
+            nx := -0.5*nBagLength + (2.5*nBagWidth + 2*nSymOffset_W);
+            ny := (1.5*nBagLength + nSymOffset_L) - 0.5*nBagWidth;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                
+            p10 := CalRob_Rotate(p20,90);                 
+            bSafetyRotate := TRUE;                
+         CASE 5 :
+            nx := -0.5*nBagLength + 1.5*nBagWidth + nSymOffset_W;
+            ny := 0.5*nBagLength - 0.5*nBagWidth;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20,-90);                 
+            bSafetyRotate := TRUE;                
+         CASE 6 :
+            nx := -0.5*nBagLength + 1.5*nBagWidth + nSymOffset_W;
+            ny := (1.5*nBagLength + nSymOffset_L) - 0.5*nBagWidth;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20,90);                                 
+            bSafetyRotate := TRUE;                
+         DEFAULT :  raise Err_UnknowBagNo;                     
+       ENDTEST            
+    ENDIF        
+    
+    RETURN p10;
+    
+    ERROR 
+    IF ERRNO = Err_UnknowBagNo THEN   
+        ERR_Send 20, "E0020:  Error Max BagNo/Layer Config" ;            
+        raise Err_UnknowBagNo;
+    ENDIF   
+    
+ENDFUNC  
+
+!***************************************************************************************************************************    
+! pattern 8A YP_Layer1
+!
+!                            || conveyor infeed direction
+!                            \/
+!                            ___ 
+!                      <--  |   |
+!                           |###|
+!                            /\
+!                         [gripper]
+!           X+               ||
+!    ___  ____  ___         
+!   | 2 ||__6_#| 4 |  [YP]  "ROB"  [YN]
+!   |###||__8_#|###|
+!    ###  ____  ###
+!Y+ | 1 ||__7_#| 3 | Y-
+!   |___||__5_#|___|
+!           X-
+!          ||  conveyor outfeed direction
+!          \/
+!
+! pattern 8 YP_Layer2
+!    ______  ______
+!   |___3__##__4___|  [YP]  "ROB"  [YN]
+!    __  __  __  __
+!   | 5|| 7|| 8|| 6|
+!   |##||##||##||##|
+!    ______  ______
+!   |___1__##__2___|
+!***************************************************************************************************************************    
+
+FUNC robtarget GetP8APosYP_InSide(rcdProduct prod, robtarget pTeach, num nLNo, num nBNo)
+
+VAR num nBagWidth;
+VAR num nBagHeight;
+VAR num nBagLength;      
+
+VAR num nx;
+VAR num ny;
+VAR num nz;
+
+VAR robtarget p10;
+VAR robtarget p20; ! when offset pos and next rotate 90 degree    
+VAR rcdLW bagOffsetlw;
+    
+    nBagWidth := prod.Bag.width;
+    nBagHeight := prod.Bag.height;
+    nBagLength := prod.Bag.length;  
+        
+    ! calculate offset value for symmetry WxL
+    bagOffsetlw := GetP8AB_BagOffsetLW(nBagLength,nBagWidth);
+    
+    IF nLNo MOD 2 = 1 THEN 
+       TEST nBNo
+         CASE 1 :
+            nx := 0;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, -180);
+         CASE 2 :
+            nx := nBagLength + bagOffsetlw.offset_pa_length;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);  
+         CASE 3 :
+            nx := 0;
+            ny := -1*nBagLength - nBagWidth - 2*bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+             p20 := Offs(pTeach,nx,ny,nz);   
+             p10 := CalRob_Rotate(p20, -180);
+         CASE 4 :
+            nx := nBagLength + bagOffsetlw.offset_pa_length;
+            ny := -1*nBagLength - nBagWidth - 2*bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);   
+         CASE 5 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny :=  -0.5*nBagLength - 0.5*nBagWidth - bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, -90);
+            bSafetyRotate := true;
+         CASE 6 :
+            nx := -0.5*nBagLength + 3.5*nBagWidth + 3*bagOffsetlw.offset_pa_width;
+            ny := -0.5*nBagLength - 0.5*nBagWidth - bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                
+            p10 := CalRob_Rotate(p20, -90);
+            bSafetyRotate := true;
+         CASE 7 :
+            nx := -0.5*nBagLength + 1.5*nBagWidth + bagOffsetlw.offset_pa_width;
+            ny := -0.5*nBagLength - 0.5*nBagWidth - bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                
+            p10 := CalRob_Rotate(p20, -90);                
+            bSafetyRotate := true;
+         CASE 8 :
+            nx := -0.5*nBagLength + 2.5*nBagWidth + 2*bagOffsetlw.offset_pa_width;
+            ny := -0.5*nBagLength - 0.5*nBagWidth - bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, -90);                
+            bSafetyRotate := true;
+         DEFAULT :   raise Err_UnknowBagNo;           
+       ENDTEST            
+    ELSE 
+       TEST nBNo
+         CASE 1 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny := 0.5*nBagWidth - 0.5*nBagLength;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                                                
+            p10 := CalRob_Rotate(p20, -90);
+            bSafetyRotate := true;
+         CASE 2 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny := 0.5*nBagWidth - 1.5*nBagLength - bagOffsetlw.offset_pa_length;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 90);
+            bSafetyRotate := true;
+         CASE 3 :
+            nx :=  0.5*nBagLength + 1.5*nBagWidth + 2*bagOffsetlw.offset_pb_lw;
+            ny := 0.5*nBagWidth - 0.5*nBagLength;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, -90);
+            bSafetyRotate := true;
+         CASE 4 :
+            nx := 0.5*nBagLength + 1.5*nBagWidth + 2*bagOffsetlw.offset_pb_lw;
+            ny := 0.5*nBagWidth - 1.5*nBagLength - bagOffsetlw.offset_pa_length;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 90);
+            bSafetyRotate := true;
+         CASE 5 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 6 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := -3*nBagWidth - 3*bagOffsetlw.offset_pa_width;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 7 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := -1*nBagWidth - bagOffsetlw.offset_pa_width;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 8 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := -2*nBagWidth - 2*bagOffsetlw.offset_pa_width;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         DEFAULT :  raise Err_UnknowBagNo;                     
+       ENDTEST            
+    ENDIF                
+    RETURN p10;        
+    ERROR 
+     IF ERRNO = Err_UnknowBagNo THEN  
+        ERR_Send 20, "E0020:  Error Max BagNo/Layer Config" ;             
+        raise Err_UnknowBagNo;
+     ENDIF         
+ENDFUNC 
+
+!***************************************************************************************************************************    
+! pattern 8A YN_Layer1
+!
+!        || conveyor infeed direction
+!        \/
+!        __
+!       |  |
+!       |##|
+!        /\
+!     [gripper]             X+
+!        ||           ___  ____  ___
+! [YP]  "ROB"  [YN]  | 4 |#__6_|| 2 |
+!                    |###|#__8_||###|
+!                     ###  ____  ###
+!                 Y+ | 3 |#__7_|| 1 | Y-
+!                    |___|#__5_||___|
+!
+!                           X-
+!                          || conveyor outfeed direction
+!                          \/ 
+!
+! pattern 8 YN_Layer2
+!                     ______  ______
+! [YP]  "ROB"  [YN]  |___4__##__3___|
+!                     __  __  __  __
+!                    | 6|| 8|| 7|| 5|
+!                    |##||##||##||##|
+!                     ______  ______
+!                    |___2__##__1___|
+!                    
+!
+!***************************************************************************************************************************    
+FUNC robtarget GetP8APosYN_Inside(rcdProduct prod, robtarget pTeach, num nLNo, num nBNo)
+VAR num nx;
+VAR num ny;
+VAR num nz;
+VAR num nBagWidth;
+VAR num nBagHeight;
+VAR num nBagLength;      
+VAR robtarget p10;
+VAR robtarget p20; ! for rotate bag
+
+VAR rcdLW bagOffsetlw;
+
+    nBagWidth := prod.Bag.width;
+    nBagHeight := prod.Bag.height;
+    nBagLength := prod.Bag.length;  
+        
+    bagOffsetlw := GetP8AB_BagOffsetLW(nBagLength,nBagWidth);
+    
+    IF nLNo MOD 2 = 1 THEN 
+       TEST nBNo
+         CASE 1 :
+            nx := 0;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 180);                                
+         CASE 2 :
+            nx := nBagLength + bagOffsetlw.offset_pa_length;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);   
+         CASE 3 :
+            nx := 0;
+            ny := nBagLength + nBagWidth + 2*bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);   
+            p10 := CalRob_Rotate(p20, 180);                                
+         CASE 4 :
+            nx := nBagLength + bagOffsetlw.offset_pa_length;
+            ny := nBagLength + nBagWidth + 2*bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);                   
+         CASE 5 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny :=  0.5*nBagLength + 0.5*nBagWidth + bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                
+            p10 := CalRob_Rotate(p20, 90);                                                
+            bSafetyRotate := TRUE;                
+         CASE 6 :
+            nx := -0.5*nBagLength + 3.5*nBagWidth + 3*bagOffsetlw.offset_pa_width;
+            ny :=  0.5*nBagLength + 0.5*nBagWidth + bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 90);                                                
+            bSafetyRotate := TRUE;                
+         CASE 7 :
+            nx := -0.5*nBagLength + 1.5*nBagWidth + bagOffsetlw.offset_pa_width;
+            ny :=  0.5*nBagLength + 0.5*nBagWidth + bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 90);                                                
+            bSafetyRotate := TRUE;                
+         CASE 8 :
+            nx := -0.5*nBagLength + 2.5*nBagWidth + 2*bagOffsetlw.offset_pa_width;
+            ny :=  0.5*nBagLength + 0.5*nBagWidth + bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 90);                                                
+            bSafetyRotate := TRUE;                
+         DEFAULT :   raise Err_UnknowBagNo;           
+       ENDTEST            
+    ELSE 
+       TEST nBNo
+         CASE 1 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny :=  0.5*nBagLength - 0.5*nBagWidth;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 90);                                                
+            bSafetyRotate := TRUE;                
+         CASE 2 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny :=  1.5*nBagLength - 0.5*nBagWidth + bagOffsetlw.offset_pa_length;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, -90);                                
+            bSafetyRotate := TRUE;                
+         CASE 3 :
+            nx :=  0.5*nBagLength + 1.5*nBagWidth + 2*bagOffsetlw.offset_pb_lw;
+            ny :=  0.5*nBagLength - 0.5*nBagWidth;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                
+            p10 := CalRob_Rotate(p20, 90);                                
+            bSafetyRotate := TRUE;                
+         CASE 4 :
+            nx :=  0.5*nBagLength + 1.5*nBagWidth + 2*bagOffsetlw.offset_pb_lw;
+            ny :=  1.5*nBagLength - 0.5*nBagWidth + bagOffsetlw.offset_pa_length;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, -90);                                                
+            bSafetyRotate := TRUE;                
+         CASE 5 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 6 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := 3*nBagWidth + 3*bagOffsetlw.offset_pa_width;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 7 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := nBagWidth + bagOffsetlw.offset_pa_width;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 8 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := 2*nBagWidth + 2*bagOffsetlw.offset_pa_width;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         DEFAULT :  raise Err_UnknowBagNo;                     
+       ENDTEST            
+    ENDIF        
+    
+    RETURN p10;
+    
+    ERROR 
+     IF ERRNO = Err_UnknowBagNo THEN  
+        ERR_Send 20, "E0020:  Error Max BagNo/Layer Config" ;             
+        RAISE Err_UnknowBagNo;
+     ENDIF         
+ENDFUNC  
+
+!***************************************************************************************************************************    
+! pattern 8B YP_Layer1
+!
+!        || conveyor infeed direction
+!        \/
+!                    Bag 1 : Teach pos    
+!                          X-
+!                     ___  ____  ___
+! [YN]  "ROB"  [YP]  | 3 ||__5_#| 1 |        * - Offset 2X bag height
+!                    |###||_*7_#|###|
+!        ||           ###  ____  ###
+!     [gripper]   Y- | 4 ||_*8_#| 2 | Y+
+!        \/          |___||__6_#|___|
+!        __
+!       |  |               X+
+!       |##|
+!                          
+!                          || conveyor outfeed direction
+!                          \/ 
+!
+! pattern 8 YP_Layer2
+!                     ______  ______
+! [YN]  "ROB"  [YP]  |___2__##__1___|
+!                     __  __  __  __
+!                    | 6||*8||*7|| 5|
+!                    |##||##||##||##|
+!                     ______  ______
+!                    |___4__##__3___|
+!                    
+!
+!***************************************************************************************************************************    
+FUNC robtarget GetP8BPosYP_InSide(rcdProduct prod, robtarget pTeach, num nLNo, num nBNo)
+
+VAR num nBagWidth;
+VAR num nBagHeight;
+VAR num nBagLength;      
+
+VAR num nx;
+VAR num ny;
+VAR num nz;
+
+VAR robtarget p10;
+VAR robtarget p20; ! when offset pos and next rotate 90 degree    
+VAR rcdLW bagOffsetlw;
+    
+    nBagWidth := prod.Bag.width;
+    nBagHeight := prod.Bag.height;
+    nBagLength := prod.Bag.length;  
+        
+    ! calculate offset value for symmetry WxL
+    bagOffsetlw := GetP8AB_BagOffsetLW(nBagLength,nBagWidth);
+    
+    IF nLNo MOD 2 = 0 THEN 
+       TEST nBNo
+         CASE 1 :
+            nx := 0;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 2 :
+            nx := nBagLength + bagOffsetlw.offset_pa_length;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);  
+            p10 := CalRob_Rotate(p20, -180);
+         CASE 3 :
+            nx := 0;
+            ny := -nBagWidth - 1*nBagLength - 2*bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);   
+         CASE 4 :
+            nx := nBagLength + bagOffsetlw.offset_pa_length;
+            ny := -nBagWidth - 1*nBagLength - 2*bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);   
+            p10 := CalRob_Rotate(p20, -180);
+         CASE 5 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny :=  -0.5*nBagLength - 0.5*nBagWidth - bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, -90);
+            bSafetyRotate := true;
+         CASE 6 :
+            nx := -0.5*nBagLength + 3.5*nBagWidth + 3*bagOffsetlw.offset_pa_width;
+            ny := -0.5*nBagLength - 0.5*nBagWidth - bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                
+            p10 := CalRob_Rotate(p20, -90);
+            bSafetyRotate := true;
+         CASE 7 :
+            nx := -0.5*nBagLength + 1.5*nBagWidth + bagOffsetlw.offset_pa_width;
+            ny := -0.5*nBagLength - 0.5*nBagWidth - bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                
+            p10 := CalRob_Rotate(p20, -90);                
+            bSafetyRotate := true;
+         CASE 8 :
+            nx := -0.5*nBagLength + 2.5*nBagWidth + 2*bagOffsetlw.offset_pa_width;
+            ny := -0.5*nBagLength - 0.5*nBagWidth - bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, -90);                
+            bSafetyRotate := true;
+         DEFAULT :   raise Err_UnknowBagNo;           
+       ENDTEST            
+    ELSE 
+       TEST nBNo
+         CASE 1 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny := 0.5*nBagWidth - 0.5*nBagLength;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                                                
+            p10 := CalRob_Rotate(p20, 90);
+            bSafetyRotate := true;
+         CASE 2 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny := 0.5*nBagWidth - 1.5*nBagLength - bagOffsetlw.offset_pa_length;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, -90);
+            bSafetyRotate := true;
+         CASE 3 :
+            nx := 0.5*nBagLength + 1.5*nBagWidth + 2*bagOffsetlw.offset_pb_lw;
+            ny := 0.5*nBagWidth - 0.5*nBagLength;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 90);
+            bSafetyRotate := true;
+         CASE 4 :
+            nx := 0.5*nBagLength + 1.5*nBagWidth + 2*bagOffsetlw.offset_pb_lw;
+            ny := 0.5*nBagWidth - 1.5*nBagLength - bagOffsetlw.offset_pa_length;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, -90);
+            bSafetyRotate := true;
+         CASE 5 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 6 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := -3*nBagWidth - 3*bagOffsetlw.offset_pa_width;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 7 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := -1*nBagWidth - bagOffsetlw.offset_pa_width;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 8 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := -2*nBagWidth - 2*bagOffsetlw.offset_pa_width;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         DEFAULT :  raise Err_UnknowBagNo;                     
+       ENDTEST            
+    ENDIF                
+    RETURN p10;        
+    ERROR 
+     IF ERRNO = Err_UnknowBagNo THEN  
+        ERR_Send 20, "E0020:  Error Max BagNo/Layer Config" ;             
+        RAISE Err_UnknowBagNo;
+     ENDIF         
+ENDFUNC 
+!***************************************************************************************************************************    
+! pattern 8B YN_Layer1
+!
+!                            || conveyor infeed direction
+!                            \/
+!   Bag 1 : Teach pos                      
+!           X-               
+!    ___  ____  ___         
+!   | 1 |#__5_|| 3 |  [YN]  "ROB"  [YP]
+!   |###|#__7_||###|
+!    ###  ____  ###          
+!Y- | 2 |#__8_|| 4 | Y+      ||
+!   |___|#__6_||___|      [gripper]
+!           X+               \/
+!                            ___ 
+!                      <--  |   |
+!                           |###|
+!          ||  conveyor outfeed direction
+!          \/
+!
+! pattern 8 YP_Layer2
+!    ______  ______
+!   |___1__##__2___|  [YN]  "ROB"  [YP]
+!    __  __  __  __
+!   | 5|| 7|| 8|| 6|
+!   |##||##||##||##|
+!    ______  ______
+!   |___3__##__4___|
+!***************************************************************************************************************************    
+FUNC robtarget GetP8BPosYN_Inside(rcdProduct prod, robtarget pTeach, num nLNo, num nBNo)
+VAR num nx;
+VAR num ny;
+VAR num nz;
+VAR num nBagWidth;
+VAR num nBagHeight;
+VAR num nBagLength;      
+VAR robtarget p10;
+VAR robtarget p20; ! for rotate bag
+
+VAR rcdLW bagOffsetlw;
+
+    nBagWidth := prod.Bag.width;
+    nBagHeight := prod.Bag.height;
+    nBagLength := prod.Bag.length;  
+        
+    bagOffsetlw := GetP8AB_BagOffsetLW(nBagLength,nBagWidth);
+    
+    IF nLNo MOD 2 = 0 THEN 
+       TEST nBNo
+         CASE 1 :
+            nx := 0;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);            
+         CASE 2 :
+            nx := nBagLength + bagOffsetlw.offset_pa_length;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);   
+            p10 := CalRob_Rotate(p20, 180);                                
+         CASE 3 :
+            nx := 0;
+            ny := nBagLength + nBagWidth + 2*bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);   
+         CASE 4 :
+            nx := nBagLength + bagOffsetlw.offset_pa_length;
+            ny := nBagLength + nBagWidth + 2*bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                   
+            p10 := CalRob_Rotate(p20, 180);                                
+         CASE 5 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny :=  0.5*nBagWidth + 0.5*nBagLength + bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                
+            p10 := CalRob_Rotate(p20, 90);                                                
+            bSafetyRotate := TRUE;                
+         CASE 6 :
+            nx := -0.5*nBagLength + 3.5*nBagWidth + 3*bagOffsetlw.offset_pa_width;
+            ny :=  0.5*nBagWidth + 0.5*nBagLength + bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 90);                                                
+            bSafetyRotate := TRUE;                
+         CASE 7 :
+            nx := -0.5*nBagLength + 1.5*nBagWidth + bagOffsetlw.offset_pa_width;
+            ny :=  0.5*nBagWidth + 0.5*nBagLength + bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 90);                                                
+            bSafetyRotate := TRUE;                
+         CASE 8 :
+            nx := -0.5*nBagLength + 2.5*nBagWidth + 2*bagOffsetlw.offset_pa_width;
+            ny :=  0.5*nBagWidth + 0.5*nBagLength + bagOffsetlw.offset_pb_lw;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 90);                                                
+            bSafetyRotate := TRUE;                
+         DEFAULT :   raise Err_UnknowBagNo;           
+       ENDTEST            
+    ELSE 
+       TEST nBNo
+         CASE 1 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny := -0.5*nBagWidth + 0.5*nBagLength;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, -90);                                                
+            bSafetyRotate := TRUE;                
+         CASE 2 :
+            nx := -0.5*nBagLength + 0.5*nBagWidth;
+            ny := -0.5*nBagWidth + 1.5*nBagLength + bagOffsetlw.offset_pa_length;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 90);                                
+            bSafetyRotate := TRUE;                
+         CASE 3 :
+            nx :=  0.5*nBagLength + 1.5*nBagWidth + 2*bagOffsetlw.offset_pb_lw;
+            ny :=  0.5*nBagLength - 0.5*nBagWidth;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);                
+            p10 := CalRob_Rotate(p20, -90);                                
+            bSafetyRotate := TRUE;                
+         CASE 4 :
+            nx :=  0.5*nBagLength + 1.5*nBagWidth + 2*bagOffsetlw.offset_pb_lw;
+            ny :=  -0.5*nBagWidth + 1.5*nBagLength + bagOffsetlw.offset_pa_length;
+            nz := (nLNo-1)*nBagHeight;
+            p20 := Offs(pTeach,nx,ny,nz);
+            p10 := CalRob_Rotate(p20, 90);                                                
+            bSafetyRotate := TRUE;                
+         CASE 5 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := 0;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 6 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := 3*nBagWidth + 3*bagOffsetlw.offset_pa_width;
+            nz := (nLNo-1)*nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 7 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := nBagWidth + bagOffsetlw.offset_pa_width;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         CASE 8 :
+            nx := nBagWidth + bagOffsetlw.offset_pb_lw;
+            ny := 2*nBagWidth + 2*bagOffsetlw.offset_pa_width;
+            nz := (nLNo-1)*nBagHeight + nBagHeight;
+            p10 := Offs(pTeach,nx,ny,nz);
+         DEFAULT :  raise Err_UnknowBagNo;                     
+       ENDTEST            
+    ENDIF        
+    
+    RETURN p10;
+    
+    ERROR 
+     IF ERRNO = Err_UnknowBagNo THEN  
+        ERR_Send 20, "E0020:  Error Max BagNo/Layer Config" ;             
+        RAISE Err_UnknowBagNo;
+     ENDIF         
+ENDFUNC  
+
+FUNC rcdLW GetP8AB_BagOffsetLW ( num l, num w)
+var rcdLW bagOffsetlw;
+VAR num nSymOffset_pa_w;
+VAR num nSymOffset_pa_l;
+VAR num nSymOffset_pb_lw;
+    
+VAR num nSymBagl_pa;
+VAR num nSymBagw_pa;
+var num nSymBaglw_pb;
+VAR num nSymBaglw_diff_pa;
+var num nSymBaglw_diff_pb;
+      
+    ! Calculate offset value for symmetry WxL
+    nSymBagw_pa := w*4;
+    nSymBagl_pa := l*2;
+    nSymBaglw_pb := 2*w + l;
+    
+    nSymBaglw_diff_pa := nSymBagl_pa - nSymBagw_pa;  
+    
+    IF nSymBaglw_diff_pa >= 0 THEN
+       nSymOffset_pa_w := nSymBaglw_diff_pa/3;
+       nSymOffset_pa_l := 0;
+       nSymBaglw_diff_pb := nSymBagl_pa - nSymBaglw_pb;
+       IF nSymBaglw_diff_pb >= 0 THEN
+           nSymOffset_pb_lw := nSymBaglw_diff_pb/2;
+       ELSE 
+           nSymOffset_pb_lw := 0;
+           nSymOffset_pa_w := nSymBaglw_diff_pa/3 + abs(nSymBaglw_diff_pb)/3;
+           nSymOffset_pa_l := 0;
+       ENDIF 
+    ELSE 
+       nSymOffset_pa_w := 0;
+       nSymOffset_pa_l := Abs(nSymBaglw_diff_pa);
+       nSymBaglw_diff_pb := nSymBagw_pa - nSymBaglw_pb;
+       IF nSymBaglw_diff_pb >= 0 THEN                
+           nSymOffset_pb_lw := abs(nSymBaglw_diff_pb)/2;
+       ELSE 
+           nSymOffset_pb_lw := 0;
+           nSymOffset_pa_w := 0;
+           nSymOffset_pa_l := Abs(nSymBaglw_diff_pa)/3 + abs(nSymBaglw_diff_pb)/3;
+       ENDIF            
+    ENDIF    
+    bagOffsetlw.offset_pa_length := nSymOffset_pa_l;
+    bagOffsetlw.offset_pa_width := nSymOffset_pa_w;
+    bagOffsetlw.offset_pb_lw := nSymOffset_pb_lw;
+    
+    RETURN bagOffsetlw;    
+ENDFUNC
+
+ENDMODULE
